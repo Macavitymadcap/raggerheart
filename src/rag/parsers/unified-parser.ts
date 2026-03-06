@@ -1,29 +1,21 @@
 import type { Document } from '@langchain/core/documents';
 import { PDFParser } from './pdf-parser';
 import { MarkdownParser } from './markdown-parser';
+import type { DocumentParser, ChunkStats } from './parser.interface';
 import { existsSync } from 'fs';
 import { extname } from 'path';
 
-/**
- * Supported document types
- */
 export type DocumentType = 'pdf' | 'markdown' | 'unknown';
 
-/**
- * Unified document parser that handles multiple formats
- */
-export class DocumentParser {
+export class UnifiedParser implements DocumentParser {
   private pdfParser: PDFParser;
   private markdownParser: MarkdownParser;
 
-  constructor(chunkSize = 1000, chunkOverlap = 200) {
+  constructor(chunkSize = 800, chunkOverlap = 100) {
     this.pdfParser = new PDFParser(chunkSize, chunkOverlap);
     this.markdownParser = new MarkdownParser(chunkSize, chunkOverlap, true);
   }
 
-  /**
-   * Detect document type from file extension
-   */
   static detectType(filePath: string): DocumentType {
     const ext = extname(filePath).toLowerCase();
     
@@ -33,35 +25,28 @@ export class DocumentParser {
     return 'unknown';
   }
 
-  /**
-   * Parse a single document (auto-detect format)
-   */
   async parseDocument(filePath: string): Promise<Document[]> {
     if (!existsSync(filePath)) {
       throw new Error(`File not found: ${filePath}`);
     }
 
-    const type = DocumentParser.detectType(filePath);
+    const type = UnifiedParser.detectType(filePath);
 
     switch (type) {
       case 'pdf':
-        return this.pdfParser.parsePDF(filePath);
+        return this.pdfParser.parseDocument(filePath);
       
       case 'markdown':
-        return this.markdownParser.parseMarkdown(filePath);
+        return this.markdownParser.parseDocument(filePath);
       
       default:
         throw new Error(`Unsupported file type: ${filePath}`);
     }
   }
 
-  /**
-   * Parse multiple documents (mixed formats supported)
-   */
   async parseMultipleDocuments(filePaths: string[]): Promise<Document[]> {
     const allChunks: Document[] = [];
     
-    // Group files by type for batch processing
     const filesByType: Record<DocumentType, string[]> = {
       pdf: [],
       markdown: [],
@@ -69,25 +54,22 @@ export class DocumentParser {
     };
 
     for (const path of filePaths) {
-      const type = DocumentParser.detectType(path);
+      const type = UnifiedParser.detectType(path);
       filesByType[type].push(path);
     }
 
-    // Process PDFs
     if (filesByType.pdf.length > 0) {
-      console.log(`\n📄 Processing ${filesByType.pdf.length} PDF files...`);
-      const pdfChunks = await this.pdfParser.parseMultiplePDFs(filesByType.pdf);
+      console.log(`\n📄 Found ${filesByType.pdf.length} PDF files`);
+      const pdfChunks = await this.pdfParser.parseMultipleDocuments(filesByType.pdf);
       allChunks.push(...pdfChunks);
     }
 
-    // Process Markdown
     if (filesByType.markdown.length > 0) {
-      console.log(`\n📝 Processing ${filesByType.markdown.length} Markdown files...`);
-      const mdChunks = await this.markdownParser.parseMultipleMarkdown(filesByType.markdown);
+      console.log(`\n📝 Found ${filesByType.markdown.length} Markdown files`);
+      const mdChunks = await this.markdownParser.parseMultipleDocuments(filesByType.markdown);
       allChunks.push(...mdChunks);
     }
 
-    // Warn about unknown types
     if (filesByType.unknown.length > 0) {
       console.warn(`\n⚠️  Skipping ${filesByType.unknown.length} unsupported files:`);
       filesByType.unknown.forEach(file => console.warn(`  - ${file}`));
@@ -97,59 +79,36 @@ export class DocumentParser {
     return allChunks;
   }
 
-  /**
-   * Parse all documents in a directory (auto-detect all formats)
-   */
   async parseDirectory(dirPath: string): Promise<Document[]> {
-    const allChunks: Document[] = [];
-
-    // Get PDFs
-    const pdfFiles = await this.pdfParser.parseMultiplePDFs([dirPath]) || [];
-    if (pdfFiles.length > 0) {
-      console.log(`\n📄 Found ${pdfFiles.length} PDF files`);
-      const pdfChunks = await this.pdfParser.parseMultiplePDFs(pdfFiles);
-      allChunks.push(...pdfChunks);
+    if (!existsSync(dirPath)) {
+      throw new Error(`Directory not found: ${dirPath}`);
     }
 
-    // Get Markdown files
-    const mdFiles = this.markdownParser['getMarkdownFiles'](dirPath);
-    if (mdFiles.length > 0) {
-      console.log(`\n📝 Found ${mdFiles.length} Markdown files`);
-      const mdChunks = await this.markdownParser.parseMultipleMarkdown(mdFiles);
-      allChunks.push(...mdChunks);
-    }
+    const allFiles: string[] = [];
+    
+    // Collect all supported files
+    const pdfFiles = this.pdfParser.getFilesFromDirectory(dirPath);
+    const mdFiles = this.markdownParser.getFilesFromDirectory(dirPath);
+    
+    allFiles.push(...pdfFiles, ...mdFiles);
 
-    if (allChunks.length === 0) {
+    if (allFiles.length === 0) {
       throw new Error(`No supported documents found in ${dirPath}`);
     }
 
-    console.log(`\n📊 Total chunks: ${allChunks.length}`);
-    return allChunks;
+    return this.parseMultipleDocuments(allFiles);
   }
 
-  /**
-   * Get comprehensive statistics
-   */
-  getStats(documents: Document[]): {
-    totalChunks: number;
-    byFormat: Record<string, number>;
-    avgChunkSize: number;
-    minChunkSize: number;
-    maxChunkSize: number;
-    withSections: number;
-    uniqueSources: number;
-  } {
+  getChunkStats(documents: Document[]): ChunkStats {
     const byFormat: Record<string, number> = {};
     const sizes = documents.map(doc => doc.pageContent.length);
     const withSections = documents.filter(doc => doc.metadata.section).length;
     const uniqueSources = new Set(documents.map(doc => doc.metadata.source)).size;
 
-    // Count by format
     for (const doc of documents) {
       const source = doc.metadata.source || '';
-      const ext = extname(source).toLowerCase();
-      const format = ext || 'unknown';
-      byFormat[format] = (byFormat[format] || 0) + 1;
+      const ext = extname(source).toLowerCase() || 'unknown';
+      byFormat[ext] = (byFormat[ext] || 0) + 1;
     }
 
     return {

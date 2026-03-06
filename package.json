@@ -6,8 +6,11 @@
   "scripts": {
     "init": "bun run src/cli/init.ts",
     "query": "bun  src/cli/query.ts",
-    "dev": "bun run src/server.ts",
-    "reset": "rm -rf **/db **/lancedb **/chroma_db **/vectorstore && echo 'Vector database cleared'"
+    "dev": "bun run src/server.tsx",
+    "reset": "bash \"curl -X DELETE 'http://localhost:6333/collections/daggerheart'| jq\"",
+    "qdrant:start": "podman start qdrant",
+    "qdrant:stop": "podman stop qdrant",
+    "qdrant:logs": "podman logs -f qdrant"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -22,7 +25,9 @@
     "@langchain/community": "^1.1.22",
     "@langchain/core": "^1.1.30",
     "@langchain/ollama": "^1.2.6",
+    "@langchain/qdrant": "^1.0.1",
     "@langchain/textsplitters": "^1.0.1",
+    "@qdrant/js-client-rest": "^1.17.0",
     "hono": "^4.12.5",
     "langchain": "^1.2.29",
     "pdf-parse": "1.1.1",
