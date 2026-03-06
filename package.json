@@ -6,11 +6,12 @@
   "scripts": {
     "init": "bun run src/cli/init.ts",
     "query": "bun  src/cli/query.ts",
-    "dev": "bun run src/server.tsx",
-    "reset": "bash \"curl -X DELETE 'http://localhost:6333/collections/daggerheart'| jq\"",
+    "dev": "bun run src/server-enhanced.tsx",
+    "reset": "podman stop qdrant; rm -rf ~/qdrant_storage; mkdir ~/qdrant_storage; podman start qdrant",
     "qdrant:start": "podman start qdrant",
     "qdrant:stop": "podman stop qdrant",
-    "qdrant:logs": "podman logs -f qdrant"
+    "qdrant:logs": "podman logs -f qdrant",
+    "qdrant:clear": "rm -rf ~/qdrant_storage"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -28,9 +29,13 @@
     "@langchain/qdrant": "^1.0.1",
     "@langchain/textsplitters": "^1.0.1",
     "@qdrant/js-client-rest": "^1.17.0",
+    "boxen": "^8.0.1",
+    "chalk": "^5.6.2",
+    "cli-table3": "^0.6.5",
     "hono": "^4.12.5",
     "langchain": "^1.2.29",
     "pdf-parse": "1.1.1",
+    "strip-ansi": "^7.2.0",
     "vectordb": "^0.21.2"
   }
 }

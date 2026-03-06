@@ -1,5 +1,5 @@
 import { defaultConfig } from '../rag/config';
-import { UnifiedParser } from '../rag/parsers/unified-parser';
+import { SmartTTRPGParser } from '../rag/parsers/smart-ttrpg-parser';
 import { EmbeddingFactory } from '../rag/embeddings/embedding-factory';
 import { VectorStoreFactory } from '../rag/vectorstores/vector-store-factory';
 import { existsSync } from 'fs';
@@ -27,7 +27,7 @@ async function init() {
       throw new Error(`Data directory not found: ${dataDir}`);
     }
 
-    const parser = new UnifiedParser(
+    const parser = new SmartTTRPGParser(
       defaultConfig.chunkSize,
       defaultConfig.chunkOverlap
     );

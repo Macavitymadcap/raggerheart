@@ -9,4 +9,5 @@ export interface Store {
   similaritySearchWithScore(query: string, k: number): Promise<[Document, number][]>
   addDocuments(documents: Document[]): Promise<void>;
   getCollectionInfo(): Promise<any>;
+  createPayloadIndex?(fieldname: string): Promise<void>;
 }

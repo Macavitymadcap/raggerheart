@@ -1,0 +1,353 @@
+/* Enhanced styles for Daggerheart RAG responses */
+
+/* Stat Block Styles */
+.stat-block {
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+  border: 2px solid #4a4a4a;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  font-family: 'Courier New', monospace;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.stat-block.adversary {
+  border-color: #8b0000;
+  background: linear-gradient(135deg, #2a1a1a 0%, #1a0a0a 100%);
+}
+
+.stat-block.environment {
+  border-color: #2e8b57;
+  background: linear-gradient(135deg, #1a2a1a 0%, #0a1a0a 100%);
+}
+
+.stat-name {
+  font-size: 1.5rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: #ffd700;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.tier-role {
+  color: #daa520;
+  font-style: italic;
+  margin: 0.25rem 0;
+}
+
+.tier {
+  color: #98fb98;
+  font-weight: bold;
+  margin: 0.25rem 0;
+}
+
+.section-header {
+  color: #ff6347;
+  font-size: 1.1rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  margin: 1rem 0 0.5rem 0;
+  border-bottom: 1px solid #4a4a4a;
+  padding-bottom: 0.25rem;
+}
+
+.stats-line {
+  color: #87ceeb;
+  font-family: monospace;
+  margin: 0.25rem 0;
+  line-height: 1.6;
+}
+
+.attack-line {
+  color: #ff4500;
+  font-weight: bold;
+  margin: 0.5rem 0;
+}
+
+.xp-line {
+  color: #9370db;
+  font-style: italic;
+  margin: 0.5rem 0;
+}
+
+.feature {
+  margin: 0.5rem 0 0.5rem 1rem;
+  color: #e0e0e0;
+  line-height: 1.5;
+}
+
+.feature-name {
+  color: #ffa500;
+  font-weight: bold;
+}
+
+.feature-type {
+  color: #98fb98;
+  font-style: italic;
+  margin-left: 0.5rem;
+}
+
+.feature-desc {
+  color: #d3d3d3;
+  margin-left: 0.5rem;
+}
+
+.spacer {
+  height: 0.5rem;
+}
+
+/* Equipment Table Styles */
+.equipment-table-container {
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+.equipment-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.equipment-table thead {
+  background: linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%);
+}
+
+.equipment-table th {
+  padding: 1rem;
+  text-align: left;
+  color: #ffd700;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  border-bottom: 2px solid #4a4a4a;
+}
+
+.equipment-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #2a2a2a;
+  color: #d3d3d3;
+}
+
+.equipment-table tr:hover {
+  background: #2a2a2a;
+}
+
+.equipment-table .item-name {
+  color: #ffa500;
+  font-weight: bold;
+}
+
+/* Class Guide Styles */
+.class-guide {
+  background: #1a1a1a;
+  border: 2px solid #4a4a4a;
+  border-radius: 8px;
+  padding: 2rem;
+  margin: 1rem 0;
+}
+
+.class-title {
+  font-size: 2rem;
+  color: #ffd700;
+  text-align: center;
+  margin: 0 0 1rem 0;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+
+.divider {
+  border: none;
+  border-top: 2px solid #4a4a4a;
+  margin: 1.5rem 0;
+}
+
+.class-section {
+  margin: 2rem 0;
+}
+
+.section-title {
+  color: #ff6347;
+  font-size: 1.3rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  margin: 0 0 1rem 0;
+  border-bottom: 2px solid #4a4a4a;
+  padding-bottom: 0.5rem;
+}
+
+.class-section.description p {
+  color: #d3d3d3;
+  line-height: 1.8;
+  margin: 0.5rem 0;
+}
+
+.class-section.core-stats p {
+  color: #87ceeb;
+  margin: 0.5rem 0 0.5rem 1rem;
+  font-family: monospace;
+}
+
+.class-section .feature {
+  background: #2a2a2a;
+  border-left: 4px solid #ffa500;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+.class-section .feature h4 {
+  color: #ffa500;
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+}
+
+.class-section .feature .feature-type {
+  display: inline-block;
+  background: #3a3a3a;
+  color: #98fb98;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.class-section .feature p {
+  color: #d3d3d3;
+  line-height: 1.6;
+  margin: 0.5rem 0 0 0;
+}
+
+.feature-item {
+  color: #d3d3d3;
+  margin: 0.5rem 0 0.5rem 1rem;
+}
+
+/* Domain Cards Styles */
+.domain-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+.domain-card {
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+  border: 2px solid #4a4a4a;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.domain-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+  border-color: #ffd700;
+}
+
+.card-name {
+  color: #ffd700;
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.card-meta {
+  color: #9370db;
+  font-style: italic;
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+}
+
+.card-text {
+  color: #d3d3d3;
+  line-height: 1.6;
+  margin: 0.5rem 0;
+}
+
+/* Comparison Styles */
+.comparison-container {
+  background: #1a1a1a;
+  border: 2px solid #4a4a4a;
+  border-radius: 8px;
+  padding: 2rem;
+  margin: 1rem 0;
+  font-family: monospace;
+  color: #d3d3d3;
+  line-height: 1.8;
+}
+
+/* General Response Styles */
+.general-response {
+  background: #1a1a1a;
+  border-left: 4px solid #4a4a4a;
+  padding: 1rem 1.5rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+.general-response p {
+  color: #d3d3d3;
+  line-height: 1.7;
+  margin: 0.75rem 0;
+}
+
+.general-response li {
+  color: #d3d3d3;
+  margin: 0.5rem 0 0.5rem 2rem;
+  line-height: 1.6;
+}
+
+/* Not Found Message */
+.not-found {
+  background: #2a1a1a;
+  border: 2px solid #8b0000;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.not-found p {
+  color: #ff6347;
+  margin: 0.5rem 0;
+}
+
+.not-found .hint {
+  color: #d3d3d3;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .stat-block {
+    padding: 1rem;
+    font-size: 0.9rem;
+  }
+  
+  .equipment-table {
+    font-size: 0.85rem;
+  }
+  
+  .equipment-table th,
+  .equipment-table td {
+    padding: 0.5rem;
+  }
+  
+  .domain-cards-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .class-guide {
+    padding: 1rem;
+  }
+}

@@ -39,17 +39,42 @@ export class QdrantStore implements Store {
     await this.createCollection(embeddings);
 
     console.log('  🔢 Creating embeddings and storing vectors...');
-    this.store = await QdrantVectorStore.fromDocuments(
-      documents,
-      embeddings,
-      {
-        url: this.config.url,
-        collectionName: this.config.collectionName,
-        apiKey: this.config.apiKey,
-      }
-    );
+    console.log(`  📦 Processing ${documents.length} documents in batches...`);
     
-    console.log('  ✅ Vectors stored in Qdrant');
+    // CRITICAL FIX: Process in small batches to avoid RAM exhaustion
+    const batchSize = 50; // Small batches for 8GB RAM
+    const totalBatches = Math.ceil(documents.length / batchSize);
+    
+    for (let i = 0; i < documents.length; i += batchSize) {
+      const batch = documents.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+      
+      console.log(`  ⚙️  Batch ${batchNum}/${totalBatches} (${batch.length} docs)...`);
+      
+      if (i === 0) {
+        // First batch: create the store
+        this.store = await QdrantVectorStore.fromDocuments(
+          batch,
+          embeddings,
+          {
+            url: this.config.url,
+            collectionName: this.config.collectionName,
+            apiKey: this.config.apiKey,
+          }
+        );
+      } else {
+        // Subsequent batches: add to existing store
+        if (!this.store) {
+          throw new Error('Store not initialized');
+        }
+        await this.store.addDocuments(batch);
+      }
+      
+      // Small delay to let RAM recover
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    console.log('  ✅ All vectors stored in Qdrant');
   }
 
   private async createCollection(embeddings: Embeddings): Promise<void> {
