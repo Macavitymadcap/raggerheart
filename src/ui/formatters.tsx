@@ -1,26 +1,22 @@
-import type { QueryType } from '../server';
-import { weaponTable, statBlock } from './templates';
+import { WeaponTable, StatBlock } from './components';
 
-export function formatAnswer(text: string, query: QueryType): string {
+export function formatAnswer(text: string, isWeaponQuery: boolean): string {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   
-  // Detect if response contains pipe-separated table data
   const hasPipes = lines.some(l => l.includes('|'));
   
-  if (hasPipes && query === 'equipment') {
+  if (hasPipes && isWeaponQuery) {
     return formatEquipmentData(lines);
   }
   
-  // Check for adversary stat block format
   const isStatBlock = lines.some(l => 
     l.match(/^(Tier\s+\d+|Difficulty:|FEATURES|Motives\s+&\s+Tactics)/i)
   );
   
   if (isStatBlock) {
-    return statBlock(lines.join('\n'));
+    return <StatBlock content={lines.join('\n')} /> as any;
   }
   
-  // Default formatting - paragraphs and lists
   return formatParagraphs(lines);
 }
 
@@ -54,33 +50,38 @@ function formatEquipmentData(lines: string[]): string {
     return formatParagraphs(lines);
   }
   
-  return weaponTable(weapons);
+  return <WeaponTable weapons={weapons} /> as any;
 }
 
 function formatParagraphs(lines: string[]): string {
-  let html = '';
-  let inList = false;
+  const elements: any[] = [];
+  let currentList: string[] = [];
   
   for (const line of lines) {
-    // Detect bullet points
     if (line.match(/^[-*•]\s/)) {
-      if (!inList) {
-        html += '<ul>';
-        inList = true;
-      }
-      html += `<li>${line.replace(/^[-*•]\s/, '')}</li>`;
+      currentList.push(line.replace(/^[-*•]\s/, ''));
     } else {
-      if (inList) {
-        html += '</ul>';
-        inList = false;
+      if (currentList.length > 0) {
+        elements.push(
+          <ul>
+            {currentList.map((item, i) => <li key={i}>{item}</li>)}
+          </ul>
+        );
+        currentList = [];
       }
-      html += `<p>${line}</p>`;
+      elements.push(<p>{line}</p>);
     }
   }
   
-  if (inList) {
-    html += '</ul>';
+  if (currentList.length > 0) {
+    elements.push(
+      <ul>
+        {currentList.map((item, i) => <li key={i}>{item}</li>)}
+      </ul>
+    );
   }
   
-  return html || `<p>${lines.join(' ')}</p>`;
+  return elements.length > 0 
+    ? elements.join('')
+    : `<p>${lines.join(' ')}</p>`;
 }

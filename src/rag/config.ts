@@ -1,4 +1,4 @@
-;export interface ModelConfig {
+export interface ModelConfig {
   provider: 'ollama' | 'openai' | 'anthropic';
   modelName: string;
   baseUrl?: string;
@@ -15,14 +15,20 @@ export interface EmbeddingConfig {
 }
 
 export interface VectorStoreConfig {
-  provider: 'memory';
+  provider: 'memory' | 'lance' | 'qdrant';
   collectionName: string;
-  persistDirectory: string;
+  persistDirectory?: string;
+  // Qdrant-specific options
+  url?: string;
+  apiKey?: string;
+  onDisk?: boolean;
+  quantization?: boolean;
+  memmap?: boolean;
 }
 
 export interface AppConfig {
-  fastModel: ModelConfig;      // For simple queries
-  accurateModel: ModelConfig;   // For complex extractions
+  fastModel: ModelConfig;
+  accurateModel: ModelConfig;
   embedding: EmbeddingConfig;
   vectorStore: VectorStoreConfig;
   chunkSize: number;
@@ -30,21 +36,19 @@ export interface AppConfig {
 }
 
 export const defaultConfig: AppConfig = {
-  // Fast model for general queries (2-3x faster)
   fastModel: {
     provider: 'ollama',
     modelName: 'llama3.2:1b',
     baseUrl: 'http://localhost:11434',
-    temperature: 0.3,  // Lower for more deterministic responses
-    numCtx: 2048,      // Smaller context for speed
+    temperature: 0.3,
+    numCtx: 2048,
   },
-  // Accurate model for stat blocks and complex queries
   accurateModel: {
     provider: 'ollama',
     modelName: 'llama3.2:3b',
     baseUrl: 'http://localhost:11434',
-    temperature: 0.3,  // Lower for more deterministic responses
-    numCtx: 4096,      // Larger context for complex extractions
+    temperature: 0.3,
+    numCtx: 4096,
   },
   embedding: {
     provider: 'ollama',
@@ -52,10 +56,13 @@ export const defaultConfig: AppConfig = {
     baseUrl: 'http://localhost:11434',
   },
   vectorStore: {
-    provider: 'memory',
-    collectionName: 'rag_documents',
-    persistDirectory: './vectorstore',
+    provider: 'qdrant',
+    collectionName: 'daggerheart_rag',
+    url: 'http://localhost:6333',
+    onDisk: true,
+    quantization: false,
+    memmap: true,
   },
-  chunkSize: 800,    // Smaller for more precise retrieval
-  chunkOverlap: 100, // Less overlap for speed
+  chunkSize: 800,
+  chunkOverlap: 100,
 };

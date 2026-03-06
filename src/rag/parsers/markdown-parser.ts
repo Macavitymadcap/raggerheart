@@ -2,10 +2,8 @@ import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { Document } from '@langchain/core/documents';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, basename } from 'path';
+import type { DocumentParser, ChunkStats } from './parser.interface';
 
-/**
- * Markdown frontmatter interface
- */
 interface MarkdownFrontmatter {
   title?: string;
   author?: string;
@@ -15,18 +13,12 @@ interface MarkdownFrontmatter {
   [key: string]: any;
 }
 
-/**
- * Markdown document with parsed content and metadata
- */
 interface MarkdownDocument {
   content: string;
   frontmatter: MarkdownFrontmatter;
   sections: MarkdownSection[];
 }
 
-/**
- * A section of markdown (by header)
- */
 interface MarkdownSection {
   level: number;
   title: string;
@@ -35,15 +27,12 @@ interface MarkdownSection {
   endLine: number;
 }
 
-/**
- * Parser for Markdown documents with intelligent chunking
- */
-export class MarkdownParser {
+export class MarkdownParser implements DocumentParser {
   private splitter: RecursiveCharacterTextSplitter;
 
   constructor(
-    private chunkSize = 1000,
-    private chunkOverlap = 200,
+    private chunkSize = 800,
+    private chunkOverlap = 100,
     private splitByHeaders = true
   ) {
     this.splitter = new RecursiveCharacterTextSplitter({
@@ -53,10 +42,7 @@ export class MarkdownParser {
     });
   }
 
-  /**
-   * Parse a single markdown file
-   */
-  async parseMarkdown(filePath: string): Promise<Document[]> {
+  async parseDocument(filePath: string): Promise<Document[]> {
     console.log(`  📄 Loading: ${filePath}`);
     
     const content = readFileSync(filePath, 'utf-8');
@@ -67,7 +53,6 @@ export class MarkdownParser {
       return this.chunkBySections(parsed, filePath);
     }
     
-    // Fallback to standard chunking
     console.log(`  ✂️  Splitting into chunks...`);
     const chunks = await this.splitter.createDocuments(
       [parsed.content],
@@ -82,80 +67,57 @@ export class MarkdownParser {
     return chunks;
   }
 
-  /**
-   * Parse multiple markdown files
-   */
-  async parseMultipleMarkdown(filePaths: string[]): Promise<Document[]> {
+  async parseMultipleDocuments(filePaths: string[]): Promise<Document[]> {
     const allChunks: Document[] = [];
     
     for (const path of filePaths) {
-      const chunks = await this.parseMarkdown(path);
+      const chunks = await this.parseDocument(path);
       allChunks.push(...chunks);
     }
     
-    console.log(`\n📊 Total chunks: ${allChunks.length}`);
+    console.log(`\n📊 Total Markdown chunks: ${allChunks.length}`);
     return allChunks;
   }
 
-  /**
-   * Parse all markdown files in a directory
-   */
-  async parseDirectory(dirPath: string): Promise<Document[]> {
-    const files = this.getMarkdownFiles(dirPath);
-    console.log(`\n📁 Found ${files.length} markdown files in ${dirPath}`);
-    
-    return this.parseMultipleMarkdown(files);
-  }
-
-  /**
-   * Get all markdown files recursively from a directory
-   */
-  private getMarkdownFiles(dirPath: string): string[] {
+  getFilesFromDirectory(dirPath: string): string[] {
     const files: string[] = [];
     
-    const items = readdirSync(dirPath);
-    
-    for (const item of items) {
-      const fullPath = join(dirPath, item);
-      const stat = statSync(fullPath);
+    try {
+      const items = readdirSync(dirPath);
       
-      if (stat.isDirectory()) {
-        // Recurse into subdirectories
-        files.push(...this.getMarkdownFiles(fullPath));
-      } else if (
-        item.endsWith('.md') || 
-        item.endsWith('.markdown') ||
-        item.endsWith('.mdx')
-      ) {
-        files.push(fullPath);
+      for (const item of items) {
+        const fullPath = join(dirPath, item);
+        const stat = statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+          files.push(...this.getFilesFromDirectory(fullPath));
+        } else if (
+          item.endsWith('.md') || 
+          item.endsWith('.markdown') ||
+          item.endsWith('.mdx')
+        ) {
+          files.push(fullPath);
+        }
       }
+    } catch (error) {
+      console.warn(`Warning: Could not read directory ${dirPath}`);
     }
     
     return files;
   }
 
-  /**
-   * Parse markdown content with frontmatter
-   */
-  private parseMarkdownContent(
-    content: string,
-    filePath: string
-  ): MarkdownDocument {
+  private parseMarkdownContent(content: string, filePath: string): MarkdownDocument {
     let frontmatter: MarkdownFrontmatter = {};
     let markdownContent = content;
     
-    // Parse YAML frontmatter
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     
     if (frontmatterMatch) {
       const yamlContent = frontmatterMatch[1];
       markdownContent = frontmatterMatch[2]!;
-      
-      // Simple YAML parsing (for basic key-value pairs)
       frontmatter = this.parseYamlFrontmatter(yamlContent!);
     }
     
-    // Parse sections by headers
     const sections = this.extractSections(markdownContent);
     
     return {
@@ -165,12 +127,8 @@ export class MarkdownParser {
     };
   }
 
-  /**
-   * Simple YAML frontmatter parser
-   */
   private parseYamlFrontmatter(yaml: string): MarkdownFrontmatter {
     const frontmatter: MarkdownFrontmatter = {};
-    
     const lines = yaml.split('\n');
     
     for (const line of lines) {
@@ -183,7 +141,6 @@ export class MarkdownParser {
       const key = trimmed.substring(0, colonIndex).trim();
       let value: string | string[] = trimmed.substring(colonIndex + 1).trim();
       
-      // Remove quotes
       if (
         (value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))
@@ -191,12 +148,11 @@ export class MarkdownParser {
         value = value.slice(1, -1);
       }
       
-      // Parse arrays
       if (value.startsWith('[') && value.endsWith(']')) {
         value = value
           .slice(1, -1)
           .split(',')
-          .map(v  => v.trim().replace(/['"]/g, ''));
+          .map(v => v.trim().replace(/['"]/g, ''));
       }
       
       frontmatter[key] = value;
@@ -205,9 +161,6 @@ export class MarkdownParser {
     return frontmatter;
   }
 
-  /**
-   * Extract sections by markdown headers
-   */
   private extractSections(content: string): MarkdownSection[] {
     const sections: MarkdownSection[] = [];
     const lines = content.split('\n');
@@ -220,14 +173,12 @@ export class MarkdownParser {
       const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
       
       if (headerMatch) {
-        // Save previous section
         if (currentSection) {
           currentSection.content = currentContent.join('\n').trim();
           currentSection.endLine = i - 1;
           sections.push(currentSection);
         }
         
-        // Start new section
         const level = headerMatch[1]!.length;
         const title = headerMatch[2]!;
         
@@ -244,7 +195,6 @@ export class MarkdownParser {
       }
     }
     
-    // Save last section
     if (currentSection) {
       currentSection.content = currentContent.join('\n').trim();
       currentSection.endLine = lines.length - 1;
@@ -254,9 +204,6 @@ export class MarkdownParser {
     return sections;
   }
 
-  /**
-   * Chunk by sections intelligently
-   */
   private async chunkBySections(
     parsed: MarkdownDocument,
     filePath: string
@@ -264,7 +211,6 @@ export class MarkdownParser {
     const chunks: Document[] = [];
     
     for (const section of parsed.sections) {
-      // If section is small enough, keep it as one chunk
       if (section.content.length <= this.chunkSize) {
         chunks.push(
           new Document({
@@ -279,7 +225,6 @@ export class MarkdownParser {
           })
         );
       } else {
-        // Split large sections
         const sectionChunks = await this.splitter.createDocuments(
           [section.content],
           [{
@@ -299,17 +244,7 @@ export class MarkdownParser {
     return chunks;
   }
 
-  /**
-   * Get chunk statistics
-   */
-  getChunkStats(documents: Document[]): {
-    totalChunks: number;
-    avgChunkSize: number;
-    minChunkSize: number;
-    maxChunkSize: number;
-    withSections: number;
-    uniqueSections: number;
-  } {
+  getChunkStats(documents: Document[]): ChunkStats {
     const sizes = documents.map(doc => doc.pageContent.length);
     const withSections = documents.filter(doc => doc.metadata.section).length;
     const uniqueSections = new Set(
@@ -326,51 +261,5 @@ export class MarkdownParser {
       withSections,
       uniqueSections,
     };
-  }
-
-  /**
-   * Convert markdown to plain text (strip formatting)
-   */
-  static stripMarkdown(markdown: string): string {
-    return markdown
-      // Remove headers
-      .replace(/^#{1,6}\s+/gm, '')
-      // Remove bold/italic
-      .replace(/(\*\*|__)(.*?)\1/g, '$2')
-      .replace(/(\*|_)(.*?)\1/g, '$2')
-      // Remove links [text](url) -> text
-      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-      // Remove images ![alt](url)
-      .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '')
-      // Remove inline code
-      .replace(/`([^`]+)`/g, '$1')
-      // Remove code blocks
-      .replace(/```[\s\S]*?```/g, '')
-      // Remove horizontal rules
-      .replace(/^[-*_]{3,}$/gm, '')
-      // Clean up multiple newlines
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
-
-  /**
-   * Extract code blocks from markdown
-   */
-  static extractCodeBlocks(markdown: string): Array<{
-    language: string;
-    code: string;
-  }> {
-    const codeBlocks: Array<{ language: string; code: string }> = [];
-    const regex = /```(\w*)\n([\s\S]*?)```/g;
-    
-    let match;
-    while ((match = regex.exec(markdown)) !== null) {
-      codeBlocks.push({
-        language: match[1] || 'plaintext',
-        code: match[2]!.trim(),
-      });
-    }
-    
-    return codeBlocks;
   }
 }
