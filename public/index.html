@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daggerheart RAG Assistant</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+  <header>
+    <h1>
+      ⚔️ Daggerheart RAG Assistant
+      <small>Ask questions about the Daggerheart SRD</small>
+    </h1>
+  </header>
+  
+  <main>
+    <div id="conversation" role="feed" aria-live="polite">
+      <article class="message assistant">
+        <div class="message-content">
+          <p>👋 Welcome! Ask me anything about Daggerheart mechanics, rules, or lore.</p>
+        </div>
+      </article>
+    </div>
+    
+    <div id="loading-indicator" class="htmx-indicator loading-message">
+      <span class="loading"></span>
+      <span>Searching documents and generating answer...</span>
+    </div>
+    
+    <form 
+      hx-post="/query" 
+      hx-target="#conversation" 
+      hx-swap="beforeend"
+      hx-on::after-request="this.reset(); enableForm()"
+      hx-on::before-request="disableForm()"
+      hx-indicator="#loading-indicator"
+      id="query-form"
+    >
+      <input 
+        type="text" 
+        name="question" 
+        id="question-input"
+        placeholder="What are Hope tokens used for?" 
+        required
+        autocomplete="off"
+      />
+      <button type="submit" id="submit-btn">Send</button>
+    </form>
+    
+    <div class="settings">
+      <label>
+        Chunks to retrieve:
+        <input type="number" id="k-value" value="4" min="1" max="20" />
+      </label>
+    </div>
+  </main>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

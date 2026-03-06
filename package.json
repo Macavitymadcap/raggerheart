@@ -1,0 +1,31 @@
+{
+  "name": "daggerheart-rag",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "init": "bun run src/cli/init.ts",
+    "query": "bun  src/cli/query.ts",
+    "dev": "bun run src/server.ts",
+    "reset": "rm -rf **/db **/lancedb **/chroma_db **/vectorstore && echo 'Vector database cleared'"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^25.3.3",
+    "@types/pdf-parse": "^1.1.5"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@lancedb/lancedb": "^0.26.2",
+    "@langchain/community": "^1.1.22",
+    "@langchain/core": "^1.1.30",
+    "@langchain/ollama": "^1.2.6",
+    "@langchain/textsplitters": "^1.0.1",
+    "hono": "^4.12.5",
+    "langchain": "^1.2.29",
+    "pdf-parse": "1.1.1",
+    "vectordb": "^0.21.2"
+  }
+}
