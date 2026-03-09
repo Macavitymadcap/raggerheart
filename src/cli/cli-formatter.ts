@@ -1,4 +1,4 @@
-// src/ui/cli-formatter.ts
+// src/cli/cli-formatter.ts - FIXED VERSION
 /**
  * Beautiful CLI formatting for Daggerheart RAG responses
  * 
@@ -9,7 +9,6 @@
 import chalk from 'chalk';
 import boxen from 'boxen';
 import Table from 'cli-table3';
-import stripAnsi from 'strip-ansi';
 import type { QueryIntent } from '../types/query';
 
 export interface FormatterOptions {
@@ -101,22 +100,23 @@ export class CLIFormatter {
     for (const line of lines) {
       const trimmed = line.trim();
 
-      // Name (all caps)
-      if (trimmed === trimmed.toUpperCase() && trimmed.length > 3 && !trimmed.includes('FEATURES')) {
-        name = trimmed;
-        formatted += chalk.hex('#FFD700').bold(trimmed) + '\n';
+      // Name (all caps or **NAME**)
+      if ((trimmed === trimmed.toUpperCase() && trimmed.length > 3 && !trimmed.includes('FEATURES')) ||
+          trimmed.match(/^\*\*[A-Z\s]+\*\*$/)) {
+        name = trimmed.replace(/\*\*/g, '');
+        formatted += chalk.hex('#FFD700').bold(name) + '\n';
         continue;
       }
 
       // Tier/Role
-      if (trimmed.match(/^Tier\s+\d+/i)) {
-        tier = trimmed;
-        formatted += chalk.hex('#DAA520')(trimmed) + '\n';
+      if (trimmed.match(/^_?\*?\*?Tier\s+\d+/i)) {
+        tier = trimmed.replace(/[_*]/g, '');
+        formatted += chalk.hex('#DAA520')(tier) + '\n';
         continue;
       }
 
       // Section headers
-      if (trimmed.match(/^(Motives?\s+&\s+Tactics?|FEATURES)$/i)) {
+      if (trimmed.match(/^(Motives?\s+&\s+Tactics?|FEATURES|Experience)$/i)) {
         formatted += '\n' + chalk.hex('#FF6347').bold(trimmed) + '\n';
         continue;
       }
@@ -128,23 +128,28 @@ export class CLIFormatter {
       }
 
       // Attack line
-      if (trimmed.match(/^⚔.*ATK|^\+\d+.*\|/)) {
-        formatted += chalk.hex('#FF4500').bold(trimmed) + '\n';
+      if (trimmed.match(/^⚔.*ATK|^\*\*⚔.*ATK|^\+\d+.*\|/)) {
+        formatted += chalk.hex('#FF4500').bold(trimmed.replace(/\*\*/g, '')) + '\n';
         continue;
       }
 
-      // XP line
-      if (trimmed.match(/^XP:/i)) {
+      // XP/Experience line
+      if (trimmed.match(/^(XP:|Experience:)/i)) {
         formatted += chalk.hex('#9370DB')(trimmed) + '\n';
         continue;
       }
 
       // Features
-      if (trimmed.match(/^[•\-*]\s+/)) {
-        const [featurePart, ...descParts] = trimmed.replace(/^[•\-*]\s+/, '').split(':');
+      if (trimmed.match(/^[•\-*]\s+/) || trimmed.match(/^_\*\*/)) {
+        const [featurePart, ...descParts] = trimmed
+          .replace(/^[•\-*]\s+/, '')
+          .replace(/^_\*\*/, '')
+          .replace(/\*\*_?:/, ':')
+          .split(':');
+        
         if (descParts.length > 0) {
           formatted += chalk.hex('#FFA500')(`• ${featurePart}:`) + 
-                      chalk.gray(descParts.join(':')) + '\n';
+                      chalk.gray(descParts.join(':').trim()) + '\n';
         } else {
           formatted += chalk.gray(`• ${featurePart}`) + '\n';
         }
@@ -152,7 +157,9 @@ export class CLIFormatter {
       }
 
       // Regular text
-      formatted += chalk.gray(trimmed) + '\n';
+      if (trimmed && !trimmed.startsWith('Based on')) {
+        formatted += chalk.gray(trimmed) + '\n';
+      }
     }
 
     const borderColor = isAdversary ? 'red' : 'green';
@@ -249,10 +256,11 @@ export class CLIFormatter {
     for (const line of lines) {
       const trimmed = line.trim();
 
-      // Skip template artifacts
+      // Skip template artifacts and intro text
       if (trimmed.includes('[Feature Name]') || 
           trimmed.includes('[Type]:') ||
-          trimmed.includes('[... all')) {
+          trimmed.includes('[... all') ||
+          trimmed.startsWith('Based on')) {
         continue;
       }
 
@@ -274,15 +282,20 @@ export class CLIFormatter {
         continue;
       }
 
-      // Features
-      if (trimmed.match(/^[•\-*]\s+/) && inFeatures) {
-        const featureText = trimmed.replace(/^[•\-*]\s+/, '');
-        const [namePart, ...rest] = featureText.split('-');
+      // Features (numbered or bulleted)
+      if ((trimmed.match(/^[•\-*\d]+[\.\)]\s+/) || trimmed.match(/^\d+\.\s+\*\*/)) && inFeatures) {
+        const featureText = trimmed
+          .replace(/^[•\-*\d]+[\.\)]\s+/, '')
+          .replace(/^\d+\.\s+/, '');
+        
+        const [namePart, ...rest] = featureText.split(/[-–:]/);
         
         if (rest.length > 0) {
-          const [typePart, ...descParts] = rest.join('-').split(':');
+          const restText = rest.join(':').trim();
+          const [typePart, ...descParts] = restText.split(':');
+          
           formatted += chalk.hex('#FFA500').bold(`• ${namePart?.trim()}`) +
-                      chalk.hex('#98FB98')(` - ${typePart?.trim()}`) +
+                      (typePart ? chalk.hex('#98FB98')(` - ${typePart.trim()}`) : '') +
                       (descParts.length > 0 ? chalk.gray(`: ${descParts.join(':').trim()}`) : '') + '\n';
         } else {
           formatted += chalk.gray(`• ${featureText}`) + '\n';
@@ -317,9 +330,72 @@ export class CLIFormatter {
   }
 
   /**
-   * Format domain cards
+   * Format domain cards - FIXED VERSION
    */
   private formatDomainCards(text: string): string {
+    // Try to extract cards from bullet point format
+    const cardPattern = /^[•\-*]\s+(.+?)\s*-\s*Level\s+(\d+)/gmi;
+    const matches = [...text.matchAll(cardPattern)];
+    
+    if (matches.length === 0) {
+      // Fallback: try markdown headers
+      return this.formatDomainCardsMarkdown(text);
+    }
+
+    const formattedCards: string[] = [];
+    
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i]!;
+      const cardName = match[1]?.trim();
+      const level = match[2];
+      const startIdx = match.index!;
+      const endIdx = i < matches.length - 1 ? matches[i + 1]!.index! : text.length;
+      
+      const cardText = text.substring(startIdx, endIdx).trim();
+      
+      // Extract cost, effect, range, duration
+      const costMatch = cardText.match(/Cost:\s*(.+?)(?:\n|Effect:|Range:|Duration:|$)/i);
+      const effectMatch = cardText.match(/Effect:\s*(.+?)(?:\n\s*(?:Range:|Duration:|[•\-*])|\n\n|$)/is);
+      const rangeMatch = cardText.match(/Range:\s*(.+?)(?:\n|Duration:|$)/i);
+      const durationMatch = cardText.match(/Duration:\s*(.+?)(?:\n|$)/i);
+      
+      let content = chalk.hex('#FFD700').bold(`${cardName} - Level ${level}`) + '\n';
+      content += chalk.gray('─'.repeat(Math.min((cardName?.length || 0) + 10, 50))) + '\n\n';
+      
+      if (costMatch) {
+        content += chalk.hex('#87CEEB')('💎 Cost: ') + chalk.white(costMatch[1]?.trim()) + '\n';
+      }
+      
+      if (effectMatch) {
+        const effect = effectMatch[1]?.trim().replace(/\n/g, ' ');
+        content += chalk.hex('#98FB98')('✨ Effect:\n  ') + chalk.gray(effect) + '\n';
+      }
+      
+      if (rangeMatch) {
+        content += chalk.hex('#FFA500')('📏 Range: ') + chalk.white(rangeMatch[1]?.trim()) + '\n';
+      }
+      
+      if (durationMatch) {
+        content += chalk.hex('#9370DB')('⏱️  Duration: ') + chalk.white(durationMatch[1]?.trim()) + '\n';
+      }
+      
+      const formattedCard = boxen(content.trim(), {
+        padding: 1,
+        margin: { top: 0, bottom: 1, left: 2, right: 2 },
+        borderStyle: 'round',
+        borderColor: 'magenta',
+      });
+      
+      formattedCards.push(formattedCard);
+    }
+
+    return formattedCards.length > 0 ? formattedCards.join('\n') : this.formatGeneral(text);
+  }
+
+  /**
+   * Format domain cards from markdown headers (fallback)
+   */
+  private formatDomainCardsMarkdown(text: string): string {
     const cards = text.split(/(?=^#{2,3}\s+\w)/m).filter(c => c.trim());
     const formattedCards: string[] = [];
 
@@ -357,7 +433,7 @@ export class CLIFormatter {
       }
     }
 
-    return formattedCards.join('\n');
+    return formattedCards.length > 0 ? formattedCards.join('\n') : this.formatGeneral(text);
   }
 
   /**
@@ -382,6 +458,11 @@ export class CLIFormatter {
 
     for (const line of lines) {
       const trimmed = line.trim();
+
+      // Skip intro phrases
+      if (trimmed.startsWith('Based on') || trimmed.startsWith('Here is')) {
+        continue;
+      }
 
       // Bullet points
       if (trimmed.match(/^[•\-*]\s+/)) {

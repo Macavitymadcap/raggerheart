@@ -4,7 +4,7 @@ import { EmbeddingFactory } from '../rag/embeddings/embedding-factory';
 import { ModelFactory } from '../rag/models/model-factory';
 import { VectorStoreFactory } from '../rag/vectorstores/vector-store-factory';
 import { QueryClassifier } from '../rag/query-classifier';
-import { getPromptForIntent } from '../ui/enhanced-prompts';
+import { getPromptForIntent } from './enhanced-prompts';
 import * as readline from 'readline';
 
 async function enhancedQuery() {
@@ -36,10 +36,14 @@ async function enhancedQuery() {
     console.log('  - Type "help" for commands');
     console.log('  - Type "debug" to toggle debug mode');
     console.log('  - Examples:');
-    console.log('    • "show me the skeleton archer statblock"');
-    console.log('    • "list all seraph class features"');
-    console.log('    • "what weapons are available?"');
-    console.log('    • "show grace domain cards"\n');
+    console.log('    
+- "show me the skeleton archer statblock"');
+    console.log('    
+- "list all seraph class features"');
+    console.log('    
+- "what weapons are available?"');
+    console.log('    
+- "show grace domain cards"\n');
 
     const rl = readline.createInterface({
       input: process.stdin,

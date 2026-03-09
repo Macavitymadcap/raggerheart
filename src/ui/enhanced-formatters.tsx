@@ -96,8 +96,10 @@ function formatAdversaryStatBlock(text: string): string {
     }
     
     // Features (bullet points)
-    if (line.match(/^[•\-*]\s+/)) {
-      const featureText = line.replace(/^[•\-*]\s+/, '');
+    if (line.match(/^[
+-\-*]\s+/)) {
+      const featureText = line.replace(/^[
+-\-*]\s+/, '');
       const [name, ...rest] = featureText.split(':');
       
       if (rest.length > 0) {
@@ -148,9 +150,12 @@ function formatEnvironmentStatBlock(text: string): string {
       html += `<p class="tier">${trimmed}</p>\n`;
     } else if (trimmed === 'FEATURES') {
       html += `<h3 class="section-header">${trimmed}</h3>\n`;
-    } else if (trimmed.match(/^[•\-*]\s+/)) {
-      const featureText = trimmed.replace(/^[•\-*]\s+/, '');
-      html += `<div class="feature">• ${featureText}</div>\n`;
+    } else if (trimmed.match(/^[
+-\-*]\s+/)) {
+      const featureText = trimmed.replace(/^[
+-\-*]\s+/, '');
+      html += `<div class="feature">
+- ${featureText}</div>\n`;
     } else {
       html += `<p>${trimmed}</p>\n`;
     }
@@ -260,8 +265,10 @@ function formatClassGuide(text: string): string {
     }
     
     // Features (bullet points)
-    if (trimmed.match(/^[•\-*]\s+/)) {
-      const featureText = trimmed.replace(/^[•\-*]\s+/, '');
+    if (trimmed.match(/^[
+-\-*]\s+/)) {
+      const featureText = trimmed.replace(/^[
+-\-*]\s+/, '');
       const [name, ...rest] = featureText.split(':');
       
       if (rest.length > 0 && name) {
@@ -272,7 +279,8 @@ function formatClassGuide(text: string): string {
           ${desc.length > 0 ? `<p class="feature-desc">${desc.join('-').trim()}</p>` : ''}
         </div>\n`;
       } else {
-        html += `<p class="feature-item">• ${featureText}</p>\n`;
+        html += `<p class="feature-item">
+- ${featureText}</p>\n`;
       }
       continue;
     }
@@ -313,8 +321,10 @@ function formatDomainCards(text: string): string {
         continue;
       }
       
-      // Domain/level line (contains •)
-      if (line.includes('•')) {
+      // Domain/level line (contains 
+-)
+      if (line.includes('
+-')) {
         html += `<p class="card-meta">${line}</p>\n`;
         continue;
       }
@@ -348,8 +358,10 @@ function formatGeneral(text: string): string {
     const trimmed = line.trim();
     
     // Bullet points
-    if (trimmed.match(/^[•\-*]\s+/)) {
-      html += `<li>${trimmed.replace(/^[•\-*]\s+/, '')}</li>\n`;
+    if (trimmed.match(/^[
+-\-*]\s+/)) {
+      html += `<li>${trimmed.replace(/^[
+-\-*]\s+/, '')}</li>\n`;
     } else {
       html += `<p>${trimmed}</p>\n`;
     }

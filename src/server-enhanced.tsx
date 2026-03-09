@@ -6,7 +6,7 @@ import { EmbeddingFactory } from './rag/embeddings/embedding-factory';
 import { ModelFactory } from './rag/models/model-factory';
 import { VectorStoreFactory } from './rag/vectorstores/vector-store-factory';
 import { QueryClassifier } from './rag/query-classifier';
-import { getPromptForIntent } from './ui/enhanced-prompts';
+import { getPromptForIntent } from './cli/enhanced-prompts';
 import { formatResponse } from './ui/enhanced-formatters';
 import { UserMessage, AssistantMessage, ErrorMessage } from './ui/components';
 

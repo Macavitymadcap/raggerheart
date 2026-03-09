@@ -55,7 +55,8 @@ function Sources({ docs, scores }: { docs: Document[]; scores: number[] }) {
                 <div class="source-details">
                   <div class="source-name">{source}</div>
                   <div class="source-meta">
-                    Page {page} • {(score * 100).toFixed(1)}% relevant
+                    Page {page} 
+- {(score * 100).toFixed(1)}% relevant
                   </div>
                 </div>
               </li>

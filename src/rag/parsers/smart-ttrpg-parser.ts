@@ -1,9 +1,9 @@
 // src/rag/parsers/smart-ttrpg-parser.ts
-// FINAL OPTIMIZED VERSION - Handles tables correctly
+// UPDATED FOR NEW MARKDOWN FORMAT
 import { Document } from '@langchain/core/documents';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { basename, join } from 'path';
-import type { DocumentParser, ChunkStats } from './parser.interface';
+import type { ChunkStats, DocumentParser } from './parser.interface';
 import type { ContentType, EnhancedMetadata } from '../../types/query';
 
 interface EntityBlock {
@@ -16,35 +16,38 @@ interface EntityBlock {
 }
 
 /**
- * FINAL OPTIMIZED Smart TTRPG Parser
- * - Strict 800 char limit (safe for all embedding models)
- * - Smart table splitting (by rows, not paragraphs)
- * - All content types supported
+ * Smart TTRPG Parser - Updated for clean markdown format
+ * 
+ * NEW FORMAT SUPPORT:
+ * - Clean headers: # TITLE, ## TIER 1
+ * - Features: ***Name - Type:*** Description
+ * - No italic wrappers around tier info
+ * - Standard markdown tables
  */
 export class SmartTTRPGParser implements DocumentParser {
   private maxChunkSize: number;
   private chunkOverlap: number;
 
-  constructor(maxChunkSize = 800, chunkOverlap = 80) {
+  constructor(maxChunkSize = 1200, chunkOverlap = 200) {
     this.maxChunkSize = maxChunkSize;
     this.chunkOverlap = chunkOverlap;
   }
 
   async parseDocument(filePath: string): Promise<Document[]> {
-    console.log(`  📄 Loading: ${filePath}`);
+    console.log(`  📄 Loading: ${basename(filePath)}`);
     
     const content = readFileSync(filePath, 'utf-8');
     const filename = basename(filePath);
     const documentType = this.detectDocumentType(filename);
     const entities = this.extractEntities(content, documentType, filePath);
     
-    console.log(`  🎯 Found ${entities.length} complete entities`);
+    console.log(`  🎯 Found ${entities.length} entities`);
     
     const documents: Document[] = [];
     
     for (const entity of entities) {
       if (entity.content.length > this.maxChunkSize) {
-        console.log(`  ⚠️  Splitting: ${entity.title} (${entity.content.length} chars)`);
+        console.log(`  ✂️  Splitting: ${entity.title} (${entity.content.length} chars)`);
         const subChunks = this.splitLargeEntity(entity);
         documents.push(...subChunks);
       } else {
@@ -52,7 +55,7 @@ export class SmartTTRPGParser implements DocumentParser {
           new Document({
             pageContent: entity.content,
             metadata: {
-              source: filePath,
+              source: basename(filePath),
               filename,
               section: entity.title,
               documentType,
@@ -101,12 +104,12 @@ export class SmartTTRPGParser implements DocumentParser {
         
         if (stat.isDirectory()) {
           files.push(...this.getFilesFromDirectory(fullPath));
-        } else if (item.endsWith('.md') || item.endsWith('.markdown') || item.endsWith('.mdx')) {
+        } else if (item.endsWith('.md')) {
           files.push(fullPath);
         }
       }
     } catch (error) {
-      console.warn(`Warning: Could not read directory ${dirPath}`);
+      console.error(`Error reading directory ${dirPath}:`, error);
     }
     
     return files;
@@ -115,16 +118,22 @@ export class SmartTTRPGParser implements DocumentParser {
   private detectDocumentType(filename: string): ContentType {
     const lower = filename.toLowerCase();
     
-    if (lower.includes('adversaries-tier')) return 'adversary';
-    if (lower.includes('environments-tier')) return 'environment';
-    if (lower.includes('-class.md')) return 'class';
-    if (lower.includes('-domain-cards.md')) return 'domain_card';
-    if (lower.includes('weapons.md')) return 'weapon';
-    if (lower.includes('armor.md')) return 'armor';
+    // Adversaries and environments
+    if (lower.includes('adversaries') || lower.includes('adversary')) return 'adversary';
+    if (lower.includes('environments') || lower.includes('environment')) return 'environment';
+    
+    // Classes and content
+    if (lower.includes('-class.md') || lower.includes('bard')) return 'class';
+    if (lower.includes('domain-cards.md') || lower.includes('blade-domain')) return 'domain_card';
+    if (lower.includes('weapons.md')) return 'equipment';
+    if (lower.includes('armor.md')) return 'equipment';
     if (lower.includes('consumables.md')) return 'consumable';
-    if (lower.includes('loot.md')) return 'loot';
     if (lower.includes('ancestries.md')) return 'ancestry';
-    if (lower.includes('communities.md')) return 'community';
+    
+    // GM guidance
+    if (lower.includes('guidance') || lower.includes('running') || lower.includes('using')) {
+      return 'general';
+    }
     
     return 'general';
   }
@@ -144,15 +153,19 @@ export class SmartTTRPGParser implements DocumentParser {
         return this.extractClassContent(lines, filePath);
       case 'domain_card':
         return this.extractDomainCards(lines, filePath);
-      case 'weapon':
-      case 'armor':
+      case 'equipment':
       case 'consumable':
-      case 'loot':
         return this.extractEquipmentSections(lines, filePath, documentType);
+      case 'ancestry':
+        return this.extractAncestries(lines, filePath);
       default:
         return this.extractGenericSections(lines, filePath);
     }
   }
+
+  // ============================================================================
+  // STAT BLOCKS (Adversaries & Environments)
+  // ============================================================================
 
   private extractStatBlocks(
     lines: string[],
@@ -164,15 +177,17 @@ export class SmartTTRPGParser implements DocumentParser {
     let blockTitle = '';
     let blockStart = 0;
     let tier: number | undefined;
-    let role: string | undefined;
     let inStatBlock = false;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] || '';
       const trimmed = line.trim();
+      
+      // Match ## TITLE or ### TITLE format (all caps)
       const headerMatch = trimmed.match(/^#{2,3}\s+([A-Z\s&'-]+)$/);
       
       if (headerMatch && trimmed.length > 5) {
+        // Save previous block
         if (inStatBlock && currentBlock.length > 3) {
           const content = currentBlock.join('\n').trim();
           if (content.length > 0) {
@@ -184,7 +199,6 @@ export class SmartTTRPGParser implements DocumentParser {
                 documentType: type,
                 entityName: blockTitle,
                 tier,
-                role,
                 sectionType: 'stat_block',
               },
               startLine: blockStart,
@@ -193,28 +207,29 @@ export class SmartTTRPGParser implements DocumentParser {
           }
         }
 
+        // Start new block
         blockTitle = headerMatch[1]!.trim();
         currentBlock = [line];
         blockStart = i;
         inStatBlock = true;
         tier = undefined;
-        role = undefined;
         continue;
       }
 
       if (inStatBlock) {
         currentBlock.push(line);
+        
+        // Extract tier from "***Tier X Type***" format
         if (!tier) {
-          const tierMatch = trimmed.match(/Tier\s+(\d+)/i);
-          if (tierMatch) tier = parseInt(tierMatch[1]!);
-        }
-        if (!role && type === 'adversary') {
-          const roleMatch = trimmed.match(/Tier\s+\d+\s+(Minion|Standard|Support|Leader|Solo|Bruiser)/i);
-          if (roleMatch) role = roleMatch[1];
+          const tierMatch = trimmed.match(/\*\*\*Tier\s+(\d+)/i);
+          if (tierMatch) {
+            tier = parseInt(tierMatch[1]!);
+          }
         }
       }
     }
 
+    // Save last block
     if (currentBlock.length > 3 && inStatBlock) {
       const content = currentBlock.join('\n').trim();
       if (content.length > 0) {
@@ -226,7 +241,6 @@ export class SmartTTRPGParser implements DocumentParser {
             documentType: type,
             entityName: blockTitle,
             tier,
-            role,
             sectionType: 'stat_block',
           },
           startLine: blockStart,
@@ -238,52 +252,43 @@ export class SmartTTRPGParser implements DocumentParser {
     return entities;
   }
 
+  // ============================================================================
+  // CLASS CONTENT
+  // ============================================================================
+
   private extractClassContent(lines: string[], filePath: string): EntityBlock[] {
     const entities: EntityBlock[] = [];
-    const className = this.extractClassName(filePath);
+    const className = basename(filePath).replace('-class.md', '').toUpperCase();
     
     let currentSection: string[] = [];
-    let sectionTitle = `${className}`;
-    let sectionType = 'description';
+    let sectionTitle = className;
     let sectionStart = 0;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] || '';
       const trimmed = line.trim();
-      const majorHeader = trimmed.match(/^#{2,3}\s+(.+)$/);
       
-      if (majorHeader) {
-        if (currentSection.length > 2) {
-          const content = currentSection.join('\n').trim();
+      // ## HEADER or ### HEADER
+      const headerMatch = trimmed.match(/^#{2,3}\s+([A-Z\s&'-]+)$/);
+      
+      if (headerMatch && currentSection.length > 3) {
+        const content = currentSection.join('\n').trim();
+        if (content.length > 0) {
           entities.push({
             type: 'class_feature',
-            title: sectionTitle,
+            title: `${className} - ${sectionTitle}`,
             content,
             metadata: {
               documentType: 'class',
-              section: sectionTitle,
-              sectionType,
+              entityName: className,
+              sectionType: 'class_features',
             },
             startLine: sectionStart,
             endLine: i - 1,
           });
         }
 
-        const headerText = majorHeader[1]!.toUpperCase();
-        
-        if (headerText.includes('FOUNDATION')) {
-          sectionType = 'foundation_features';
-        } else if (headerText.includes('SPECIALIZATION')) {
-          sectionType = 'specialization_features';
-        } else if (headerText.includes('MASTERY')) {
-          sectionType = 'mastery_features';
-        } else if (headerText.includes('SUBCLASS')) {
-          sectionType = 'subclasses';
-        } else {
-          sectionType = 'description';
-        }
-        
-        sectionTitle = `${className} - ${majorHeader[1]}`;
+        sectionTitle = headerMatch[1]!.trim();
         currentSection = [line];
         sectionStart = i;
       } else {
@@ -291,40 +296,51 @@ export class SmartTTRPGParser implements DocumentParser {
       }
     }
 
-    if (currentSection.length > 2) {
+    // Save last section
+    if (currentSection.length > 3) {
       const content = currentSection.join('\n').trim();
-      entities.push({
-        type: 'class_feature',
-        title: sectionTitle,
-        content,
-        metadata: {
-          documentType: 'class',
-          section: sectionTitle,
-          sectionType,
-        },
-        startLine: sectionStart,
-        endLine: lines.length - 1,
-      });
+      if (content.length > 0) {
+        entities.push({
+          type: 'class_feature',
+          title: `${className} - ${sectionTitle}`,
+          content,
+          metadata: {
+            documentType: 'class',
+            entityName: className,
+            sectionType: 'class_features',
+          },
+          startLine: sectionStart,
+          endLine: lines.length - 1,
+        });
+      }
     }
 
     return entities;
   }
 
+  // ============================================================================
+  // DOMAIN CARDS
+  // ============================================================================
+
   private extractDomainCards(lines: string[], filePath: string): EntityBlock[] {
     const entities: EntityBlock[] = [];
-    const domain = this.extractDomainName(filePath);
+    const domainName = basename(filePath).replace('-domain-cards.md', '').toUpperCase();
     
     let currentCard: string[] = [];
     let cardTitle = '';
     let cardStart = 0;
+    let level: number | undefined;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] || '';
       const trimmed = line.trim();
-      const cardHeader = trimmed.match(/^###\s+(.+)$/);
-
-      if (cardHeader) {
-        if (currentCard.length > 1) {
+      
+      // ## CARD NAME format
+      const headerMatch = trimmed.match(/^##\s+([A-Z\s&'-]+)$/);
+      
+      if (headerMatch) {
+        // Save previous card
+        if (currentCard.length > 2) {
           const content = currentCard.join('\n').trim();
           if (content.length > 0) {
             entities.push({
@@ -333,8 +349,9 @@ export class SmartTTRPGParser implements DocumentParser {
               content,
               metadata: {
                 documentType: 'domain_card',
-                domain,
-                section: cardTitle,
+                entityName: cardTitle,
+                domain: domainName,
+                level,
                 sectionType: 'domain_card',
               },
               startLine: cardStart,
@@ -343,15 +360,29 @@ export class SmartTTRPGParser implements DocumentParser {
           }
         }
 
-        cardTitle = cardHeader[1]!.trim();
+        // Start new card
+        cardTitle = headerMatch[1]!.trim();
         currentCard = [line];
         cardStart = i;
-      } else {
+        level = undefined;
+        continue;
+      }
+
+      if (currentCard.length > 0) {
         currentCard.push(line);
+        
+        // Extract level from "**Level X Domain Ability**"
+        if (!level) {
+          const levelMatch = trimmed.match(/\*\*Level\s+(\d+)/i);
+          if (levelMatch) {
+            level = parseInt(levelMatch[1]!);
+          }
+        }
       }
     }
 
-    if (currentCard.length > 1) {
+    // Save last card
+    if (currentCard.length > 2) {
       const content = currentCard.join('\n').trim();
       if (content.length > 0) {
         entities.push({
@@ -360,8 +391,9 @@ export class SmartTTRPGParser implements DocumentParser {
           content,
           metadata: {
             documentType: 'domain_card',
-            domain,
-            section: cardTitle,
+            entityName: cardTitle,
+            domain: domainName,
+            level,
             sectionType: 'domain_card',
           },
           startLine: cardStart,
@@ -373,50 +405,59 @@ export class SmartTTRPGParser implements DocumentParser {
     return entities;
   }
 
+  // ============================================================================
+  // EQUIPMENT (Weapons, Armor, Consumables)
+  // ============================================================================
+
   private extractEquipmentSections(
     lines: string[],
     filePath: string,
-    equipmentType: ContentType
+    type: ContentType
   ): EntityBlock[] {
     const entities: EntityBlock[] = [];
     let currentSection: string[] = [];
     let sectionTitle = '';
     let sectionStart = 0;
+    let tier: number | undefined;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] || '';
       const trimmed = line.trim();
-      const header = trimmed.match(/^#{2,3}\s+(.+)$/);
-
-      if (header) {
-        if (currentSection.length > 1) {
-          const content = currentSection.join('\n').trim();
-          if (content.length > 0) {
-            entities.push({
-              type: 'equipment_table',
-              title: sectionTitle,
-              content,
-              metadata: {
-                documentType: equipmentType,
-                equipmentType: equipmentType,
-                section: sectionTitle,
-                sectionType: 'equipment_section',
-              },
-              startLine: sectionStart,
-              endLine: i - 1,
-            });
-          }
+      
+      // ## TIER X or ## Section Name
+      const headerMatch = trimmed.match(/^##\s+(.+)$/);
+      
+      if (headerMatch && currentSection.length > 2) {
+        const content = currentSection.join('\n').trim();
+        if (content.length > 0) {
+          entities.push({
+            type: 'equipment_table',
+            title: sectionTitle,
+            content,
+            metadata: {
+              documentType: type,
+              tier,
+              sectionType: 'equipment_table',
+            },
+            startLine: sectionStart,
+            endLine: i - 1,
+          });
         }
 
-        sectionTitle = header[1]!.trim();
+        sectionTitle = headerMatch[1]!.trim();
         currentSection = [line];
         sectionStart = i;
+        
+        // Extract tier from "Tier X (Level Y-Z)" format
+        const tierMatch = sectionTitle.match(/Tier\s+(\d+)/i);
+        tier = tierMatch ? parseInt(tierMatch[1]!) : undefined;
       } else {
         currentSection.push(line);
       }
     }
 
-    if (currentSection.length > 1) {
+    // Save last section
+    if (currentSection.length > 2) {
       const content = currentSection.join('\n').trim();
       if (content.length > 0) {
         entities.push({
@@ -424,10 +465,9 @@ export class SmartTTRPGParser implements DocumentParser {
           title: sectionTitle,
           content,
           metadata: {
-            documentType: equipmentType,
-            equipmentType: equipmentType,
-            section: sectionTitle,
-            sectionType: 'equipment_section',
+            documentType: type,
+            tier,
+            sectionType: 'equipment_table',
           },
           startLine: sectionStart,
           endLine: lines.length - 1,
@@ -438,7 +478,11 @@ export class SmartTTRPGParser implements DocumentParser {
     return entities;
   }
 
-  private extractGenericSections(lines: string[], filePath: string): EntityBlock[] {
+  // ============================================================================
+  // ANCESTRIES
+  // ============================================================================
+
+  private extractAncestries(lines: string[], filePath: string): EntityBlock[] {
     const entities: EntityBlock[] = [];
     let currentSection: string[] = [];
     let sectionTitle = '';
@@ -447,27 +491,28 @@ export class SmartTTRPGParser implements DocumentParser {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] || '';
       const trimmed = line.trim();
-      const header = trimmed.match(/^#{1,3}\s+(.+)$/);
-
-      if (header) {
-        if (currentSection.length > 2) {
-          const content = currentSection.join('\n').trim();
-          if (content.length > 0) {
-            entities.push({
-              type: 'section',
-              title: sectionTitle,
-              content,
-              metadata: {
-                section: sectionTitle,
-                sectionType: 'generic',
-              },
-              startLine: sectionStart,
-              endLine: i - 1,
-            });
-          }
+      
+      // ## ANCESTRY NAME
+      const headerMatch = trimmed.match(/^##\s+([A-Z\s&'-]+)$/);
+      
+      if (headerMatch && currentSection.length > 3) {
+        const content = currentSection.join('\n').trim();
+        if (content.length > 0) {
+          entities.push({
+            type: 'section',
+            title: sectionTitle,
+            content,
+            metadata: {
+              documentType: 'ancestry',
+              entityName: sectionTitle,
+              sectionType: 'ancestry',
+            },
+            startLine: sectionStart,
+            endLine: i - 1,
+          });
         }
 
-        sectionTitle = header[1]!.trim();
+        sectionTitle = headerMatch[1]!.trim();
         currentSection = [line];
         sectionStart = i;
       } else {
@@ -475,7 +520,8 @@ export class SmartTTRPGParser implements DocumentParser {
       }
     }
 
-    if (currentSection.length > 2) {
+    // Save last section
+    if (currentSection.length > 3) {
       const content = currentSection.join('\n').trim();
       if (content.length > 0) {
         entities.push({
@@ -483,8 +529,9 @@ export class SmartTTRPGParser implements DocumentParser {
           title: sectionTitle,
           content,
           metadata: {
-            section: sectionTitle,
-            sectionType: 'generic',
+            documentType: 'ancestry',
+            entityName: sectionTitle,
+            sectionType: 'ancestry',
           },
           startLine: sectionStart,
           endLine: lines.length - 1,
@@ -495,167 +542,232 @@ export class SmartTTRPGParser implements DocumentParser {
     return entities;
   }
 
-  /**
-   * OPTIMIZED: Smart splitting with table awareness
-   */
-  private splitLargeEntity(entity: EntityBlock): Document[] {
-    const chunks: Document[] = [];
-    const content = entity.content;
-    
-    // Check if content contains markdown tables
-    if (content.includes('|') && content.match(/\|.*\|.*\|/)) {
-      return this.splitTableContent(entity);
+  // ============================================================================
+  // GENERIC SECTIONS (GM Guidance, etc.)
+  // ============================================================================
+
+  private extractGenericSections(lines: string[], filePath: string): EntityBlock[] {
+    const entities: EntityBlock[] = [];
+    let currentSection: string[] = [];
+    let sectionTitle = basename(filePath).replace('.md', '');
+    let sectionStart = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] || '';
+      const trimmed = line.trim();
+      
+      // # Title, ## Section, or ### Subsection
+      const headerMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
+      
+      if (headerMatch && currentSection.length > 3) {
+        const content = currentSection.join('\n').trim();
+        if (content.length > 0) {
+          entities.push({
+            type: 'section',
+            title: sectionTitle,
+            content,
+            metadata: {
+              documentType: 'general',
+              section: sectionTitle,
+              sectionType: 'general',
+            },
+            startLine: sectionStart,
+            endLine: i - 1,
+          });
+        }
+
+        sectionTitle = headerMatch[2]!.trim();
+        currentSection = [line];
+        sectionStart = i;
+      } else {
+        currentSection.push(line);
+      }
     }
-    
-    // Otherwise split by paragraphs/sentences
-    return this.splitTextContent(entity);
+
+    // Save last section
+    if (currentSection.length > 3) {
+      const content = currentSection.join('\n').trim();
+      if (content.length > 0) {
+        entities.push({
+          type: 'section',
+          title: sectionTitle,
+          content,
+          metadata: {
+            documentType: 'general',
+            section: sectionTitle,
+            sectionType: 'general',
+          },
+          startLine: sectionStart,
+          endLine: lines.length - 1,
+        });
+      }
+    }
+
+    return entities;
   }
 
-  /**
-   * Split markdown tables by rows (not paragraphs!)
-   */
-  private splitTableContent(entity: EntityBlock): Document[] {
-    const chunks: Document[] = [];
+  // ============================================================================
+  // SPLITTING LARGE ENTITIES
+  // ============================================================================
+
+  private splitLargeEntity(entity: EntityBlock): Document[] {
+    const documents: Document[] = [];
+    const lines = entity.content.split('\n');
+    
+    // Try to split by tables first
+    if (entity.content.includes('|')) {
+      return this.splitByTable(entity);
+    }
+    
+    // Otherwise split by paragraphs
+    let currentChunk: string[] = [];
+    let currentSize = 0;
+    
+    for (const line of lines) {
+      const lineSize = line.length + 1;
+      
+      if (currentSize + lineSize > this.maxChunkSize && currentChunk.length > 0) {
+        documents.push(
+          new Document({
+            pageContent: currentChunk.join('\n'),
+            metadata: {
+              ...entity.metadata,
+              section: entity.title,
+              chunkIndex: documents.length,
+            },
+          })
+        );
+        
+        // Keep overlap
+        const overlapLines = currentChunk.slice(-2);
+        currentChunk = overlapLines;
+        currentSize = overlapLines.join('\n').length;
+      }
+      
+      currentChunk.push(line);
+      currentSize += lineSize;
+    }
+    
+    // Add final chunk
+    if (currentChunk.length > 0) {
+      documents.push(
+        new Document({
+          pageContent: currentChunk.join('\n'),
+          metadata: {
+            ...entity.metadata,
+            section: entity.title,
+            chunkIndex: documents.length,
+          },
+        })
+      );
+    }
+    
+    return documents;
+  }
+
+  private splitByTable(entity: EntityBlock): Document[] {
+    const documents: Document[] = [];
     const lines = entity.content.split('\n');
     
     let header: string[] = [];
     let currentChunk: string[] = [];
-    let partNum = 1;
+    let inTable = false;
+    let tableHeader: string[] = [];
     
-    for (const line of lines) {
-      const trimmed = line.trim();
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] || '';
+      const isTableRow = line.includes('|');
+      const isTableSeparator = line.match(/^\|[\s:-]+\|/);
       
-      // Table header row (contains | but not just dashes)
-      if (trimmed.includes('|') && !trimmed.match(/^[\|\s\-:]+$/)) {
-        // If no header yet, this is the header
-        if (header.length === 0) {
-          header.push(line);
-          // Also grab the separator line if next
-          continue;
-        }
+      if (isTableRow && !inTable) {
+        // Starting a table - save header
+        inTable = true;
+        tableHeader = [line];
+        continue;
+      }
+      
+      if (isTableSeparator) {
+        tableHeader.push(line);
+        continue;
+      }
+      
+      if (isTableRow && inTable) {
+        const chunkWithRow = [...currentChunk, ...tableHeader, line].join('\n');
         
-        // Add row to current chunk
-        currentChunk.push(line);
-        
-        // Check if chunk is getting too big
-        const chunkSize = (header.join('\n') + '\n' + currentChunk.join('\n')).length;
-        if (chunkSize > this.maxChunkSize) {
-          // Save current chunk (without this last row)
-          currentChunk.pop();
-          if (currentChunk.length > 0) {
-            chunks.push(new Document({
-              pageContent: (header.join('\n') + '\n' + currentChunk.join('\n')).trim(),
+        if (chunkWithRow.length > this.maxChunkSize && currentChunk.length > 0) {
+          // Save current chunk
+          documents.push(
+            new Document({
+              pageContent: [...header, ...currentChunk].join('\n'),
               metadata: {
                 ...entity.metadata,
-                section: `${entity.title} (Part ${partNum})`,
-                partialEntity: true,
+                section: entity.title,
+                chunkIndex: documents.length,
               },
-            }));
-            partNum++;
-          }
-          // Start new chunk with this row
-          currentChunk = [line];
+            })
+          );
+          currentChunk = [];
         }
-      } else if (trimmed.match(/^[\|\s\-:]+$/)) {
-        // Separator line (|---|---|)
-        if (header.length > 0) {
-          header.push(line);
+        
+        currentChunk.push(...tableHeader, line);
+        tableHeader = [...tableHeader];  // Keep header for next rows
+      } else {
+        // Not in table
+        inTable = false;
+        if (i < 5) {
+          header.push(line);  // Keep first few lines as context
         }
-      } else if (trimmed.length > 0) {
-        // Non-table content
         currentChunk.push(line);
       }
     }
     
     // Save final chunk
     if (currentChunk.length > 0) {
-      const finalContent = header.length > 0 
-        ? (header.join('\n') + '\n' + currentChunk.join('\n')).trim()
-        : currentChunk.join('\n').trim();
-      
-      chunks.push(new Document({
-        pageContent: finalContent,
-        metadata: {
-          ...entity.metadata,
-          section: `${entity.title}${chunks.length > 0 ? ` (Part ${partNum})` : ''}`,
-          partialEntity: chunks.length > 0,
-        },
-      }));
-    }
-    
-    return chunks.length > 0 ? chunks : [this.splitTextContent(entity)[0]!];
-  }
-
-  /**
-   * Split regular text content by paragraphs
-   */
-  private splitTextContent(entity: EntityBlock): Document[] {
-    const chunks: Document[] = [];
-    const paragraphs = entity.content.split(/\n\n+/);
-    let currentChunk = '';
-    let partNum = 1;
-
-    for (const para of paragraphs) {
-      if ((currentChunk + '\n\n' + para).length > this.maxChunkSize && currentChunk.length > 0) {
-        chunks.push(new Document({
-          pageContent: currentChunk.trim(),
+      documents.push(
+        new Document({
+          pageContent: [...header, ...currentChunk].join('\n'),
           metadata: {
             ...entity.metadata,
-            section: `${entity.title} (Part ${partNum})`,
-            partialEntity: true,
+            section: entity.title,
+            chunkIndex: documents.length,
           },
-        }));
-        partNum++;
-        currentChunk = para;
-      } else {
-        currentChunk += (currentChunk ? '\n\n' : '') + para;
-      }
+        })
+      );
     }
-
-    if (currentChunk.trim().length > 0) {
-      chunks.push(new Document({
-        pageContent: currentChunk.trim(),
-        metadata: {
-          ...entity.metadata,
-          section: `${entity.title}${chunks.length > 0 ? ` (Part ${partNum})` : ''}`,
-          partialEntity: chunks.length > 0,
-        },
-      }));
-    }
-
-    return chunks;
-  }
-
-  private extractClassName(filePath: string): string {
-    const filename = basename(filePath, '.md');
-    return filename
-      .replace(/-class$/, '')
-      .split('-')
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
-  }
-
-  private extractDomainName(filePath: string): string {
-    const filename = basename(filePath, '.md');
-    return filename
-      .replace(/-domain-cards$/, '')
-      .split('-')
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
+    
+    return documents;
   }
 
   getChunkStats(documents: Document[]): ChunkStats {
     const sizes = documents.map(doc => doc.pageContent.length);
+    const withMetadata = documents.filter(doc => 
+      doc.metadata.documentType || doc.metadata.entityName
+    ).length;
+    
     const byType: Record<string, number> = {};
-    const bySection = new Set<string>();
-
+    const byTier: Record<string, number> = {};
+    
     for (const doc of documents) {
-      const type = doc.metadata.documentType || 'unknown';
-      byType[type] = (byType[type] || 0) + 1;
-      if (doc.metadata.section) {
-        bySection.add(doc.metadata.section);
+      // Count by document type
+      const docType = doc.metadata.documentType || 'unknown';
+      byType[docType] = (byType[docType] || 0) + 1;
+      
+      // Count by tier (for adversaries/equipment)
+      if (doc.metadata.tier) {
+        const tierKey = `Tier ${doc.metadata.tier}`;
+        byTier[tierKey] = (byTier[tierKey] || 0) + 1;
       }
     }
+    
+    const uniqueSections = new Set(
+      documents
+        .filter(doc => doc.metadata.section)
+        .map(doc => doc.metadata.section)
+    ).size;
+    
+    const uniqueSources = new Set(
+      documents.map(doc => doc.metadata.source || doc.metadata.filename)
+    ).size;
 
     return {
       totalChunks: documents.length,
@@ -663,7 +775,10 @@ export class SmartTTRPGParser implements DocumentParser {
       minChunkSize: Math.min(...sizes),
       maxChunkSize: Math.max(...sizes),
       byType,
-      uniqueSections: bySection.size,
+      byTier,
+      withMetadata,
+      uniqueSections,
+      uniqueSources,
     };
   }
 }

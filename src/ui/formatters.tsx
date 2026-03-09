@@ -58,8 +58,10 @@ function formatParagraphs(lines: string[]): string {
   let currentList: string[] = [];
   
   for (const line of lines) {
-    if (line.match(/^[-*•]\s/)) {
-      currentList.push(line.replace(/^[-*•]\s/, ''));
+    if (line.match(/^[-*
+-]\s/)) {
+      currentList.push(line.replace(/^[-*
+-]\s/, ''));
     } else {
       if (currentList.length > 0) {
         elements.push(
