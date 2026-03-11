@@ -31,12 +31,10 @@ async function init() {
       process.exit(1);
     }
 
-    // Initialize smart parser with YAML frontmatter support
-    // Max 1000 chars = ~250 tokens, safe for any embedding model
     console.log('📄 Parsing documents with Smart TTRPG Parser (YAML frontmatter enabled)...\n');
     const parser = new SmartTTRPGParser(
-      1000,  // maxChunkSize - STRICT limit to prevent embedding errors
-      100    // chunkOverlap
+      defaultConfig.chunkSize,  
+      defaultConfig.chunkOverlap
     );
 
     // Parse all documents
@@ -149,13 +147,7 @@ async function init() {
     console.log('📋 Next steps:');
     console.log('  • Run queries: bun run query');
     console.log('  • Start server: bun run dev');
-    console.log('  • Beautiful CLI: bun run src/cli/beautiful-query.ts\n');
-    
-    console.log('💡 New features enabled:');
-    console.log('  ✅ YAML frontmatter metadata parsing');
-    console.log('  ✅ Tag-based filtering');
-    console.log('  ✅ Enhanced metadata indexes');
-    console.log('  ✅ Related content linking\n');
+    console.log('  • Beautiful CLI: bun run query');
 
   } catch (error) {
     console.error('\n❌ Error during initialization:');

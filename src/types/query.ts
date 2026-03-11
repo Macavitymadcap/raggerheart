@@ -18,10 +18,25 @@ export type QueryIntent =
   | 'show_adversary_statblock'
   | 'show_environment_statblock'
   | 'show_equipment_table'
+  | 'show_ancestry_features'
   | 'show_class_features'
   | 'show_domain_cards'
   | 'explain_concept'
-  | 'compare_items';
+  | 'list_spells'
+  | 'list_equipment'
+  | 'compare_items'
+  | 'show_loot_table'
+  | 'list_consumables'
+  | 'show_community_cards'
+  | 'explain_downtime'
+  | 'explain_mechanics'
+  | 'explain_hope_fear'
+  | 'explain_combat'
+  | 'explain_character_creation'
+  | 'explain_stress_armor'
+  | 'compare_classes'
+  | 'answer_question'
+  | 'general_query';
 
 export interface QueryClassification {
   contentType: ContentType;

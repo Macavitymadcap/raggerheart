@@ -158,28 +158,35 @@ export class QueryClassifier {
   private static determineChunkCount(intent: QueryIntent, contentType: ContentType): number {
     switch (intent) {
       case 'show_adversary_statblock':
-        return 12; // Need multiple chunks to get complete stat block
+        return 3;  // single file = 1 chunk, grab 3 for safety
       
       case 'show_environment_statblock':
-        return 10;
+        return 4;  // environments are similar to adversaries
       
       case 'show_equipment_table':
-        return 15; // Tables are often spread across chunks
+        return 8;  // weapons.md produced 200 chunks, but a specific query
+                  // should land on the right tier section quickly
       
       case 'show_class_features':
-        return 20; // Classes have many features
+        return 12; // seraph = 8 chunks, druid = 13, ranger = 9
+                  // 12 gets most classes fully covered
       
       case 'show_domain_cards':
-        return 25; // Domain cards are numerous
+        return 8;  // individual domain card files = 1 chunk each,
+                  // 8 gets a good spread for a single domain
       
       case 'compare_items':
-        return 12;
+        return 8;  // need chunks for both sides of comparison
+      
+      case 'explain_concept':
+      case 'explain_mechanics':
+        return 6;  // core-mechanics.md = 77 chunks, but a focused
+                  // query should surface the right 4-6
       
       default:
-        return 8;
+        return 5;
     }
   }
-
   private static requiresTableFormat(intent: QueryIntent): boolean {
     return intent === 'show_equipment_table';
   }

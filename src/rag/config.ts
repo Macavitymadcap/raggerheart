@@ -38,7 +38,7 @@ export interface AppConfig {
 export const defaultConfig: AppConfig = {
   fastModel: {
     provider: 'ollama',
-    modelName: 'mistral',
+    modelName: 'qwen2.5:7b',
     baseUrl: 'http://localhost:11434',
     temperature: 0.3,
     numCtx: 4096,
@@ -46,29 +46,29 @@ export const defaultConfig: AppConfig = {
   
   accurateModel: {
     provider: 'ollama',
-    modelName: 'deepseek-r1:14b',
+    modelName: 'qwen2.5:14b',
     baseUrl: 'http://localhost:11434',
     temperature: 0.3,
-    numCtx: 8192,
+    numCtx: 12288,
   },
   
   embedding: {
     provider: 'ollama',
-    modelName: 'mxbai-embed-large',
+    modelName: 'nomic-embed-text:latest',
     baseUrl: 'http://localhost:11434',
   },
   
   vectorStore: {
     provider: 'qdrant',
-    collectionName: 'daggerheart_rag_v2',
+    collectionName: 'daggerheart_rag',
     url: 'http://localhost:6333',
     onDisk: true,
     quantization: true,
     memmap: true,
   },
   
-  chunkSize: 1500,
-  chunkOverlap: 300,
+  chunkSize: 1000,
+  chunkOverlap: 150,
 };
 
 export const apiEmbeddingConfig: AppConfig = {

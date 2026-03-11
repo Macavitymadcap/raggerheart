@@ -1,4 +1,3 @@
-// src/ui/enhanced-prompts.ts
 import { PromptTemplate } from '@langchain/core/prompts';
 import type { QueryIntent } from '../types/query';
 
