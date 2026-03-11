@@ -1,3 +1,43 @@
+---
+type: general
+title: Character Creation
+category: core-rules
+
+player_facing: true
+gm_facing: true
+tags:
+  - character-creation
+  - getting-started
+  - player-guide
+  - step-by-step
+  - classes
+  - heritage
+  - traits
+  - equipment
+  - backgrounds
+  - experiences
+  - domain-cards
+  - connections
+sections:
+  - Choose Class and Subclass
+  - Choose Heritage
+  - Assign Character Traits
+  - Record Character Information
+  - Choose Starting Equipment
+  - Create Background
+  - Create Experiences
+  - Choose Domain Cards
+  - Create Connections
+related_topics:
+  - Classes
+  - Ancestries
+  - Communities
+  - Character Traits
+  - Equipment Tables
+  - Domain Cards
+  - Experiences
+prerequisites: []
+---
 # CHARACTER CREATION
 
 Unless their table chooses to use pre-generated characters, each player creates

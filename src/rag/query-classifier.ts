@@ -1,4 +1,5 @@
 // src/rag/query-classifier.ts
+// UPDATED WITH TAG-AWARE FILTERING
 import type { QueryClassification, ContentType, QueryIntent } from '../types/query';
 
 export class QueryClassifier {
@@ -183,22 +184,90 @@ export class QueryClassifier {
     return intent === 'show_equipment_table';
   }
 
+  /**
+   * Get metadata filter keys for enhanced retrieval
+   * NOW INCLUDES TAGS for better filtering
+   */
   private static getFilterKeys(contentType: ContentType): string[] {
     const filterMap: Record<ContentType, string[]> = {
-      adversary: ['entityName', 'tier', 'role', 'documentType'],
-      environment: ['entityName', 'tier', 'documentType'],
-      equipment: ['equipmentType', 'documentType'],
-      weapon: ['equipmentType', 'documentType'],
-      armor: ['equipmentType', 'documentType'],
-      consumable: ['equipmentType', 'documentType'],
-      loot: ['documentType'],
-      class: ['section', 'documentType'],
-      domain_card: ['domain', 'documentType'],
-      community: ['documentType'],
-      ancestry: ['documentType'],
-      general: ['section'],
+      adversary: [
+        'entityName', 
+        'tier', 
+        'role', 
+        'documentType', 
+        'tags',           // NEW: Tag filtering
+        'category',       // NEW: Category filtering
+        'difficulty'      // NEW: Difficulty filtering
+      ],
+      environment: [
+        'entityName', 
+        'tier', 
+        'documentType', 
+        'tags',           // NEW
+        'category'        // NEW
+      ],
+      equipment: [
+        'equipmentType', 
+        'documentType', 
+        'tags',           // NEW
+        'tier',
+        'category'        // NEW
+      ],
+      weapon: [
+        'equipmentType', 
+        'documentType', 
+        'tags',           // NEW
+        'weapon_trait'    // NEW
+      ],
+      armor: [
+        'equipmentType', 
+        'documentType', 
+        'tags'            // NEW
+      ],
+      consumable: [
+        'equipmentType', 
+        'documentType', 
+        'tags',           // NEW
+        'category'        // NEW
+      ],
+      loot: [
+        'documentType', 
+        'tags',           // NEW
+        'tier'
+      ],
+      class: [
+        'section', 
+        'documentType', 
+        'tags',           // NEW
+        'related_topics'  // NEW
+      ],
+      domain_card: [
+        'domain', 
+        'documentType', 
+        'tags',           // NEW
+        'level',
+        'card_type',      // NEW
+        'related_domains' // NEW
+      ],
+      community: [
+        'documentType', 
+        'tags',           // NEW
+        'category'        // NEW
+      ],
+      ancestry: [
+        'documentType', 
+        'tags',           // NEW
+        'related_topics'  // NEW
+      ],
+      general: [
+        'section', 
+        'tags',           // NEW
+        'complexity',     // NEW
+        'player_facing',  // NEW
+        'gm_facing'       // NEW
+      ],
     };
     
-    return filterMap[contentType] || ['section'];
+    return filterMap[contentType] || ['section', 'tags'];
   }
 }

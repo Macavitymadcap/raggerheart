@@ -1,0 +1,34 @@
+---
+type: domain_card
+domain: Sage
+title: Thorn Skin
+level: 5
+card_type: spell
+recall_cost: 1
+tags:
+  - sage
+  - spell
+  - level-5
+  - token-based
+  - hope-cost
+  - rest-limited
+  - damage-reduction
+  - reflection-damage
+  - melee-range
+  - defensive
+---
+## THORN SKIN
+
+**Level 5 Sage Spell**
+
+**Recall Cost: 1**
+
+Once per rest, **spend a Hope** to sprout thorns all over your body. When you
+do, place a number of tokens equal to your Spellcast trait on this card. When
+you take damage, you can spend any number of tokens to roll that number of
+**d6s**. Add the results together and reduce the incoming damage by that amount.
+If you're within Melee range of the attacker, deal that amount of damage back to
+them.
+
+When you take a rest, clear all unspent tokens.
+

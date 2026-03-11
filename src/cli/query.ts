@@ -1,15 +1,211 @@
-// src/cli/enhanced-query.ts
 import { defaultConfig } from '../rag/config';
-import { EmbeddingFactory } from '../rag/embeddings/embedding-factory';
+import { EmbeddingFactory } from '../rag/embedding-factory';
 import { ModelFactory } from '../rag/models/model-factory';
 import { VectorStoreFactory } from '../rag/vectorstores/vector-store-factory';
 import { QueryClassifier } from '../rag/query-classifier';
 import { getPromptForIntent } from './enhanced-prompts';
-import * as readline from 'readline';
+import { CLIFormatter } from './cli-formatter';
+import chalk from 'chalk';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { Store } from '../rag/vectorstores/store.interface';
 
-async function enhancedQuery() {
-  console.log('🚀 Loading Enhanced RAG system...\n');
+// ============================================================================
+// DISPLAY FUNCTIONS
+// ============================================================================
 
+function showWelcome(chunkCount: number) {
+  console.log(chalk.hex('#FFD700').bold('\n🚀 Daggerheart RAG System\n'));
+  console.log(chalk.green(`✅ Loaded ${chunkCount} document chunks`));
+  console.log(chalk.green('✅ System ready!\n'));
+  
+  console.log(chalk.hex('#87CEEB')('💡 Examples:'));
+  console.log(chalk.gray('  - "show me the skeleton archer statblock"'));
+  console.log(chalk.gray('  - "list all seraph class features"'));
+  console.log(chalk.gray('  - "what weapons are available?"'));
+  console.log(chalk.gray('  - "show grace domain cards"\n'));
+  
+  console.log(chalk.hex('#87CEEB')('📖 Commands:'));
+  console.log(chalk.gray('  - exit    - Quit'));
+  console.log(chalk.gray('  - help    - Show help'));
+  console.log(chalk.gray('  - debug   - Toggle debug mode\n'));
+}
+
+function showHelp() {
+  console.log('\n' + chalk.hex('#87CEEB').bold('📖 Query Types:') + '\n');
+  console.log(chalk.gray('  Stat blocks  - "show [name] statblock"'));
+  console.log(chalk.gray('  Class info   - "seraph class features"'));
+  console.log(chalk.gray('  Equipment    - "list weapons"'));
+  console.log(chalk.gray('  Domain cards - "grace domain cards"\n'));
+}
+
+function showAnalysis(classification: any) {
+  console.log(chalk.gray('\n┌─ Analysis ' + '─'.repeat(55)));
+  console.log(chalk.gray('│ ') + chalk.hex('#87CEEB')('Type:   ') + chalk.white(classification.contentType));
+  console.log(chalk.gray('│ ') + chalk.hex('#87CEEB')('Intent: ') + chalk.white(classification.intent));
+  console.log(chalk.gray('│ ') + chalk.hex('#87CEEB')('Chunks: ') + chalk.white(classification.k));
+  console.log(chalk.gray('└' + '─'.repeat(65)));
+}
+
+// ============================================================================
+// MODEL SELECTION
+// ============================================================================
+
+function selectModel(classification: any, fastModel: BaseChatModel, accurateModel: BaseChatModel) {
+  const USE_SMART_SWITCHING =true; 
+  
+  if (USE_SMART_SWITCHING) {
+    const useAccurateModel = [
+      'show_adversary_statblock',
+      'show_environment_statblock',
+      'show_class_features',
+      'show_domain_cards',
+      'compare_items',
+    ].includes(classification.intent);
+    
+    const model = useAccurateModel ? accurateModel : fastModel;
+    const modelName = useAccurateModel ? '3b' : '1b';
+    
+    console.log(chalk.gray('🤖 Using ') + chalk.hex('#98FB98')(modelName) + chalk.gray(' model'));
+    
+    return model;
+  } else {
+    // Use 3b for everything for better accuracy
+    console.log(chalk.gray('🤖 Using ') + chalk.hex('#98FB98')('3b') + chalk.gray(' model'));
+    return accurateModel;
+  }
+}
+
+// ============================================================================
+// CONTEXT BUILDING
+// ============================================================================
+
+function buildContext(relevantDocs: any[]): string {
+  return relevantDocs
+    .map(([doc, score]: any, i: number) => {
+      const source = doc.metadata?.source || 'Unknown';
+      const section = doc.metadata?.section || '';
+      const page = doc.metadata?.loc?.pageNumber || '?';
+      
+      const header = section
+        ? `[Source ${i + 1}: ${source} → ${section}, Page ${page}]`
+        : `[Source ${i + 1}: ${source}, Page ${page}]`;
+      
+      return `${header}\n${doc.pageContent}`;
+    })
+    .join('\n\n---\n\n');
+}
+
+// ============================================================================
+// QUERY PROCESSING
+// ============================================================================
+
+async function processQuery(
+  question: string,
+  vectorStore: Store,
+  fastModel: BaseChatModel,
+  accurateModel: BaseChatModel,
+  formatter: CLIFormatter,
+  debugMode: boolean
+): Promise<void> {
+  try {
+    // Classify the query
+    const classification = QueryClassifier.classify(question);
+    showAnalysis(classification);
+
+    // Select appropriate model
+    const model = selectModel(classification, fastModel, accurateModel);
+
+    // Retrieve relevant documents
+    const relevantDocs = await vectorStore.similaritySearchWithScore(
+      question,
+      classification.k
+    );
+
+    if (relevantDocs.length === 0) {
+      console.log(CLIFormatter.warning('No relevant documents found.'));
+      return;
+    }
+
+    // DEBUG: Show top sources
+    if (debugMode) {
+      console.log(chalk.hex('#87CEEB')('\n📚 Top Sources:\n'));
+      relevantDocs.slice(0, 5).forEach(([doc, score]: any, i: number) => {
+        const source = doc.metadata?.source || 'Unknown';
+        const section = doc.metadata?.section || '';
+        console.log(chalk.gray(`  ${i + 1}. ${section || source} (${(score * 100).toFixed(1)}% match)`));
+      });
+      console.log();
+    }
+
+    // Build context from documents
+    const context = buildContext(relevantDocs);
+
+    // Get appropriate prompt template
+    const promptTemplate = getPromptForIntent(classification.intent);
+    const prompt = await promptTemplate.format({ context, question });
+
+    // DEBUG: Show prompt and context info
+    if (debugMode) {
+      console.log(chalk.gray(`📝 Prompt: ${prompt.length} chars, Context: ${context.length} chars`));
+      console.log(chalk.gray(`📊 Retrieved ${relevantDocs.length} document chunks\n`));
+    }
+
+    // Generate response
+    console.log(chalk.hex('#87CEEB')('\n💡 Answer:\n'));
+    
+    const response = await model.invoke(prompt);
+    const fullResponse = typeof response.content === 'string' ? response.content : '';
+
+    // DEBUG: Show raw response
+    if (debugMode) {
+      console.log(chalk.gray(`\n📊 Raw response length: ${fullResponse.length} chars`));
+      console.log(chalk.gray('📄 First 200 chars of raw response:'));
+      console.log(chalk.yellow(fullResponse.substring(0, 200) + '...\n'));
+    }
+
+    // Format and display
+    const formatted = formatter.format({
+      intent: classification.intent,
+      rawText: fullResponse,
+    });
+
+    console.log(formatted);
+
+  } catch (error) {
+    console.error(CLIFormatter.error(
+      error instanceof Error ? error.message : 'Unknown error'
+    ));
+    
+    if (debugMode && error instanceof Error) {
+      console.error(chalk.gray('\n' + error.stack));
+    }
+  }
+}
+
+// ============================================================================
+// READLINE INTERFACE (Node.js compatible)
+// ============================================================================
+
+async function createReadlineInterface() {
+  // Try to use Node's readline if available, otherwise fallback
+  try {
+    const readline = await import('readline');
+    return readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: false
+    });
+  } catch {
+    // Readline not available, return null to use alternative
+    return null;
+  }
+}
+
+// ============================================================================
+// MAIN FUNCTION
+// ============================================================================
+
+async function query() {
   try {
     // Load embeddings
     const embeddings = EmbeddingFactory.create(defaultConfig.embedding);
@@ -19,208 +215,125 @@ async function enhancedQuery() {
     const collectionInfo = await vectorStore.getCollectionInfo();
 
     if (!collectionInfo) {
-      console.error('❌ No database found. Please run: bun run init\n');
+      console.error(CLIFormatter.error('No database found. Please run: bun run init'));
       process.exit(1);
     }
 
-    console.log(`📚 Loaded ${collectionInfo.count} document chunks`);
     await vectorStore.loadExisting(embeddings);
 
     // Load both models
     const fastModel = ModelFactory.create(defaultConfig.fastModel);
     const accurateModel = ModelFactory.create(defaultConfig.accurateModel);
 
-    console.log('✅ System ready!\n');
-    console.log('💡 Tips:');
-    console.log('  - Type "exit" to quit');
-    console.log('  - Type "help" for commands');
-    console.log('  - Type "debug" to toggle debug mode');
-    console.log('  - Examples:');
-    console.log('    
-- "show me the skeleton archer statblock"');
-    console.log('    
-- "list all seraph class features"');
-    console.log('    
-- "what weapons are available?"');
-    console.log('    
-- "show grace domain cards"\n');
+    // Show welcome screen
+    showWelcome(collectionInfo.count);
 
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
+    // State
     let debugMode = false;
+    const formatter = new CLIFormatter(process.stdout.columns || 80);
 
-    const askQuestion = () => {
-      rl.question('\n❓ Your question: ', async (input) => {
-        const question = input.trim();
+    // Try to use readline
+    const rl = await createReadlineInterface();
+    
+    if (rl) {
+      // Use readline interface
+      const askQuestion = () => {
+        rl.question(chalk.hex('#FFD700')('\n❓ Your question: '), async (answer) => {
+          const question = answer.trim();
 
-        if (!question) {
-          askQuestion();
-          return;
-        }
-
-        if (question.toLowerCase() === 'exit') {
-          console.log('\n👋 Goodbye!');
-          rl.close();
-          process.exit(0);
-        }
-
-        if (question.toLowerCase() === 'help') {
-          console.log('\n📖 Commands:');
-          console.log('  exit    - Quit the application');
-          console.log('  help    - Show this help');
-          console.log('  debug   - Toggle debug information');
-          console.log('\n📝 Query Types:');
-          console.log('  Stat blocks  - "show [name] statblock" or "stats for [name]"');
-          console.log('  Class info   - "seraph class features" or "warrior abilities"');
-          console.log('  Equipment    - "list weapons" or "show armor table"');
-          console.log('  Domain cards - "grace domain cards" or "show codex spells"');
-          console.log('  General      - "how does downtime work?" or "explain hope"\n');
-          askQuestion();
-          return;
-        }
-
-        if (question.toLowerCase() === 'debug') {
-          debugMode = !debugMode;
-          console.log(`${debugMode ? '✅' : '❌'} Debug mode ${debugMode ? 'enabled' : 'disabled'}`);
-          askQuestion();
-          return;
-        }
-
-        try {
-          // Classify the query
-          const classification = QueryClassifier.classify(question);
-          
-          if (debugMode) {
-            console.log('\n🔍 Query Classification:');
-            console.log(`  Content Type: ${classification.contentType}`);
-            console.log(`  Intent: ${classification.intent}`);
-            console.log(`  Entities: ${classification.entities.join(', ') || 'none'}`);
-            console.log(`  Chunks to retrieve: ${classification.k}`);
-            console.log(`  Requires table: ${classification.requiresTable}`);
-          }
-
-          // Select model based on complexity
-          const useAccurateModel = [
-            'show_adversary_statblock',
-            'show_environment_statblock',
-            'show_class_features',
-            'show_domain_cards',
-            'compare_items'
-          ].includes(classification.intent);
-          
-          const model = useAccurateModel ? accurateModel : fastModel;
-          const modelName = useAccurateModel ? '3b (accurate)' : '1b (fast)';
-          
-          console.log(`\n🤖 Using ${modelName} model`);
-          console.log(`📊 Content type: ${classification.contentType}`);
-          console.log(`🎯 Intent: ${classification.intent}`);
-
-          // Retrieve relevant documents
-          console.log(`🔍 Searching ${classification.k} most relevant chunks...\n`);
-          const relevantDocs = await vectorStore.similaritySearchWithScore(
-            question,
-            classification.k
-          );
-
-          if (relevantDocs.length === 0) {
-            console.log('❌ No relevant documents found.');
+          if (!question) {
             askQuestion();
             return;
           }
 
-          // Show sources
-          console.log('📚 Sources:');
-          relevantDocs.forEach(([doc, score]: any, i: number) => {
-            const source = doc.metadata?.source || 'Unknown';
-            const section = doc.metadata?.section || '';
-            const page = doc.metadata?.loc?.pageNumber || '?';
-            
-            const sourceInfo = section 
-              ? `${source} → ${section} (Page ${page})`
-              : `${source} (Page ${page})`;
-            
-            console.log(`  ${i + 1}. ${sourceInfo}`);
-            console.log(`     Relevance: ${(score * 100).toFixed(1)}%`);
-            
-            if (debugMode && i < 3) {
-              const preview = doc.pageContent.substring(0, 100).replace(/\n/g, ' ');
-              console.log(`     Preview: ${preview}...`);
-            }
-          });
-
-          // Build context
-          const context = relevantDocs
-            .map(([doc, score]: any, i: number) => {
-              const source = doc.metadata?.source || 'Unknown';
-              const section = doc.metadata?.section || '';
-              const page = doc.metadata?.loc?.pageNumber || '?';
-              
-              const header = section
-                ? `[Source ${i + 1}: ${source} → ${section}, Page ${page}]`
-                : `[Source ${i + 1}: ${source}, Page ${page}]`;
-              
-              return `${header}\n${doc.pageContent}`;
-            })
-            .join('\n\n---\n\n');
-
-          // Get appropriate prompt template
-          const promptTemplate = getPromptForIntent(classification.intent);
-          const prompt = await promptTemplate.format({ context, question });
-
-          if (debugMode) {
-            console.log('\n📝 Prompt Preview:');
-            console.log(prompt.substring(0, 300) + '...\n');
+          // Handle commands
+          if (question.toLowerCase() === 'exit') {
+            console.log(chalk.hex('#9370DB')('\n👋 Goodbye!\n'));
+            rl.close();
+            process.exit(0);
           }
 
-          // Stream response
-          console.log('\n💡 Answer:\n');
-          console.log('─'.repeat(60));
+          if (question.toLowerCase() === 'debug') {
+            debugMode = !debugMode;
+            console.log(debugMode 
+              ? CLIFormatter.success('Debug mode enabled')
+              : CLIFormatter.info('Debug mode disabled')
+            );
+            askQuestion();
+            return;
+          }
+
+          if (question.toLowerCase() === 'help') {
+            showHelp();
+            askQuestion();
+            return;
+          }
+
+          // Process the query
+          await processQuery(question, vectorStore, fastModel, accurateModel, formatter, debugMode);
           
-          const stream = await model.stream(prompt);
-          let fullResponse = '';
-          
-          for await (const chunk of stream) {
-            const text = typeof chunk.content === 'string' 
-              ? chunk.content 
-              : '';
-            process.stdout.write(text);
-            fullResponse += text;
-          }
-          
-          console.log('\n' + '─'.repeat(60));
+          // Ask next question
+          askQuestion();
+        });
+      };
 
-          // Show quality hints
-          if (!debugMode && fullResponse.includes('NOT FOUND:')) {
-            console.log('\n💡 Tip: Try different wording or check spelling');
-          }
+      askQuestion();
+      
+    } else {
+      // Fallback: Use simple stdin reading
+      console.log(chalk.yellow('⚠️  Using simple stdin mode (readline not available)\n'));
+      
+      process.stdin.setEncoding('utf8');
+      process.stdout.write(chalk.hex('#FFD700')('\n❓ Your question: '));
 
-          if (!debugMode && classification.intent === 'show_adversary_statblock' && fullResponse.length < 200) {
-            console.log('\n⚠️  Response seems incomplete. Try increasing chunk count or being more specific.');
-          }
+      for await (const line of console) {
+        const question = line.trim();
 
-        } catch (error) {
-          console.error('❌ Error:', error instanceof Error ? error.message : error);
-          
-          if (debugMode && error instanceof Error) {
-            console.error('\nStack trace:', error.stack);
-          }
+        if (!question) {
+          process.stdout.write(chalk.hex('#FFD700')('\n❓ Your question: '));
+          continue;
         }
 
-        askQuestion();
-      });
-    };
+        if (question.toLowerCase() === 'exit') {
+          console.log(chalk.hex('#9370DB')('\n👋 Goodbye!\n'));
+          process.exit(0);
+        }
 
-    askQuestion();
+        if (question.toLowerCase() === 'debug') {
+          debugMode = !debugMode;
+          console.log(debugMode 
+            ? CLIFormatter.success('Debug mode enabled')
+            : CLIFormatter.info('Debug mode disabled')
+          );
+          process.stdout.write(chalk.hex('#FFD700')('\n❓ Your question: '));
+          continue;
+        }
+
+        if (question.toLowerCase() === 'help') {
+          showHelp();
+          process.stdout.write(chalk.hex('#FFD700')('\n❓ Your question: '));
+          continue;
+        }
+
+        // Process the query
+        await processQuery(question, vectorStore, fastModel, accurateModel, formatter, debugMode);
+        
+        process.stdout.write(chalk.hex('#FFD700')('\n❓ Your question: '));
+      }
+    }
 
   } catch (error) {
-    console.error('❌ Error:', error instanceof Error ? error.message : error);
+    console.error(CLIFormatter.error(
+      error instanceof Error ? error.message : 'Unknown error'
+    ));
     process.exit(1);
   }
 }
 
+// ============================================================================
+// ENTRY POINT
+// ============================================================================
+
 if (import.meta.main) {
-  enhancedQuery();
+  query();
 }

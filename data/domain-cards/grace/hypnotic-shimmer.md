@@ -1,0 +1,31 @@
+---
+type: domain_card
+domain: Grace
+title: Hypnotic Shimmer
+level: 3
+card_type: spell
+recall_cost: 1
+tags:
+  - grace
+  - spell
+  - level-3
+  - stunned
+  - illusion
+  - stress-cost
+  - rest-limited
+  - aoe
+  - close-range
+  - control
+---
+## HYPNOTIC SHIMMER
+
+**Level 3 Grace Spell**
+
+**Recall Cost: 1**
+
+Make a **Spellcast Roll** against all adversaries in front of you within Close
+range. Once per rest on a success, create an illusion of flashing colors and
+lights that temporarily _Stuns_ targets you succeed against and forces them to
+mark a Stress. While _Stunned_, they can't use reactions and can't take any
+other actions until they clear this condition.
+

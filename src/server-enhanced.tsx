@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { defaultConfig } from './rag/config';
-import { EmbeddingFactory } from './rag/embeddings/embedding-factory';
+import { EmbeddingFactory } from './rag/embedding-factory';
 import { ModelFactory } from './rag/models/model-factory';
 import { VectorStoreFactory } from './rag/vectorstores/vector-store-factory';
 import { QueryClassifier } from './rag/query-classifier';

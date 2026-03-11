@@ -1,10 +1,54 @@
 // src/rag/parsers/smart-ttrpg-parser.ts
-// UPDATED FOR NEW MARKDOWN FORMAT
+// UPDATED FOR YAML FRONTMATTER SUPPORT
 import { Document } from '@langchain/core/documents';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { basename, join } from 'path';
 import type { ChunkStats, DocumentParser } from './parser.interface';
 import type { ContentType, EnhancedMetadata } from '../../types/query';
+
+interface YAMLFrontmatter {
+  // Common fields
+  type?: string;
+  category?: string;
+  title?: string;
+  tags?: string[];
+  
+  // Adversary-specific
+  tier?: number;
+  name?: string;
+  difficulty?: string;
+  hp?: number;
+  stress?: number;
+  thresholds?: string;
+  attack_modifier?: string;
+  features?: string[];
+  tactics?: string;
+  related_adversaries?: string[];
+  
+  // Domain card-specific
+  domain?: string;
+  level?: number;
+  card_type?: string;
+  recall_cost?: string;
+  related_domains?: string[];
+  
+  // Equipment-specific
+  equipment_type?: string;
+  weapon_trait?: string;
+  damage?: string;
+  burden?: string;
+  
+  // General metadata
+  sections?: string[];
+  complexity?: string;
+  prerequisites?: string[];
+  related_topics?: string[];
+  player_facing?: boolean;
+  gm_facing?: boolean;
+  
+  // Allow any additional fields
+  [key: string]: any;
+}
 
 interface EntityBlock {
   type: 'stat_block' | 'class_feature' | 'domain_card' | 'equipment_table' | 'section';
@@ -16,13 +60,13 @@ interface EntityBlock {
 }
 
 /**
- * Smart TTRPG Parser - Updated for clean markdown format
+ * Smart TTRPG Parser with YAML Frontmatter Support
  * 
- * NEW FORMAT SUPPORT:
- * - Clean headers: # TITLE, ## TIER 1
- * - Features: ***Name - Type:*** Description
- * - No italic wrappers around tier info
- * - Standard markdown tables
+ * NEW FEATURES:
+ * - Parses YAML frontmatter from markdown files
+ * - Extracts rich metadata (tags, relationships, etc.)
+ * - Supports one-file-per-entity structure
+ * - Enhanced metadata for better retrieval
  */
 export class SmartTTRPGParser implements DocumentParser {
   private maxChunkSize: number;
@@ -38,8 +82,13 @@ export class SmartTTRPGParser implements DocumentParser {
     
     const content = readFileSync(filePath, 'utf-8');
     const filename = basename(filePath);
-    const documentType = this.detectDocumentType(filename);
-    const entities = this.extractEntities(content, documentType, filePath);
+    
+    // Parse YAML frontmatter FIRST
+    const { frontmatter, content: markdownContent } = this.parseYAMLFrontmatter(content);
+    
+    const documentType = this.detectDocumentType(filename, frontmatter);
+    const lines = markdownContent.split('\n');
+    const entities = this.extractEntities(lines, documentType, filePath, frontmatter);
     
     console.log(`  🎯 Found ${entities.length} entities`);
     
@@ -48,7 +97,7 @@ export class SmartTTRPGParser implements DocumentParser {
     for (const entity of entities) {
       if (entity.content.length > this.maxChunkSize) {
         console.log(`  ✂️  Splitting: ${entity.title} (${entity.content.length} chars)`);
-        const subChunks = this.splitLargeEntity(entity);
+        const subChunks = this.splitLargeEntity(entity, frontmatter);
         documents.push(...subChunks);
       } else {
         documents.push(
@@ -59,7 +108,8 @@ export class SmartTTRPGParser implements DocumentParser {
               filename,
               section: entity.title,
               documentType,
-              ...entity.metadata,
+              ...frontmatter, // Include all frontmatter
+              ...entity.metadata, // Entity-specific metadata overrides frontmatter
             },
           })
         );
@@ -92,45 +142,133 @@ export class SmartTTRPGParser implements DocumentParser {
     return this.parseMultipleDocuments(files);
   }
 
-  private getFilesFromDirectory(dirPath: string): string[] {
-    const files: string[] = [];
+  // ============================================================================
+  // YAML FRONTMATTER PARSING
+  // ============================================================================
+
+  private parseYAMLFrontmatter(content: string): { 
+    frontmatter: YAMLFrontmatter; 
+    content: string 
+  } {
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
     
-    try {
-      const items = readdirSync(dirPath);
-      
-      for (const item of items) {
-        const fullPath = join(dirPath, item);
-        const stat = statSync(fullPath);
-        
-        if (stat.isDirectory()) {
-          files.push(...this.getFilesFromDirectory(fullPath));
-        } else if (item.endsWith('.md')) {
-          files.push(fullPath);
-        }
-      }
-    } catch (error) {
-      console.error(`Error reading directory ${dirPath}:`, error);
+    if (!frontmatterMatch) {
+      return { frontmatter: {}, content };
     }
     
-    return files;
+    const yamlContent = frontmatterMatch[1]!;
+    const markdownContent = frontmatterMatch[2]!;
+    
+    const frontmatter: YAMLFrontmatter = {};
+    const lines = yamlContent.split('\n');
+    
+    let currentKey: string | null = null;
+    let currentArray: string[] = [];
+    let inArray = false;
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      
+      // Check if this is an array item
+      if (trimmed.startsWith('-') && inArray && currentKey) {
+        const item = trimmed.substring(1).trim();
+        currentArray.push(item);
+        continue;
+      }
+      
+      // If we were in an array, save it
+      if (inArray && currentKey) {
+        frontmatter[currentKey] = currentArray;
+        currentArray = [];
+        inArray = false;
+        currentKey = null;
+      }
+      
+      const colonIndex = trimmed.indexOf(':');
+      if (colonIndex === -1) continue;
+      
+      const key = trimmed.substring(0, colonIndex).trim();
+      let value: string | string[] | boolean | number = trimmed.substring(colonIndex + 1).trim();
+      
+      // Empty value might indicate an array follows
+      if (!value) {
+        currentKey = key;
+        inArray = true;
+        continue;
+      }
+      
+      // Handle quoted strings
+      if ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      
+      // Handle inline arrays [item1, item2, item3]
+      if (value.startsWith('[') && value.endsWith(']')) {
+        value = value
+          .slice(1, -1)
+          .split(',')
+          .map(v => v.trim().replace(/['"]/g, ''));
+      }
+      
+      // Handle boolean values
+      if (value === 'true') value = true;
+      if (value === 'false') value = false;
+      
+      // Handle numbers
+      if (!isNaN(Number(value)) && value !== '' && typeof value === 'string') {
+        value = Number(value);
+      }
+      
+      frontmatter[key] = value;
+    }
+    
+    // Save final array if we ended in one
+    if (inArray && currentKey && currentArray.length > 0) {
+      frontmatter[currentKey] = currentArray;
+    }
+    
+    return { frontmatter, content: markdownContent };
   }
 
-  private detectDocumentType(filename: string): ContentType {
+  // ============================================================================
+  // DOCUMENT TYPE DETECTION
+  // ============================================================================
+
+  private detectDocumentType(filename: string, frontmatter: YAMLFrontmatter): ContentType {
+    // Check frontmatter first
+    if (frontmatter.type) {
+      const typeMap: Record<string, ContentType> = {
+        'adversary': 'adversary',
+        'environment': 'environment',
+        'class': 'class',
+        'domain_card': 'domain_card',
+        'equipment': 'equipment',
+        'weapon': 'weapon',
+        'armor': 'armor',
+        'consumable': 'consumable',
+        'loot': 'loot',
+        'ancestry': 'ancestry',
+        'community': 'community',
+        'general': 'general',
+      };
+      
+      const mappedType = typeMap[frontmatter.type.toLowerCase()];
+      if (mappedType) return mappedType;
+    }
+    
+    // Fallback to filename detection
     const lower = filename.toLowerCase();
     
-    // Adversaries and environments
     if (lower.includes('adversaries') || lower.includes('adversary')) return 'adversary';
     if (lower.includes('environments') || lower.includes('environment')) return 'environment';
-    
-    // Classes and content
     if (lower.includes('-class.md') || lower.includes('bard')) return 'class';
     if (lower.includes('domain-cards.md') || lower.includes('blade-domain')) return 'domain_card';
     if (lower.includes('weapons.md')) return 'equipment';
     if (lower.includes('armor.md')) return 'equipment';
     if (lower.includes('consumables.md')) return 'consumable';
     if (lower.includes('ancestries.md')) return 'ancestry';
-    
-    // GM guidance
     if (lower.includes('guidance') || lower.includes('running') || lower.includes('using')) {
       return 'general';
     }
@@ -138,28 +276,31 @@ export class SmartTTRPGParser implements DocumentParser {
     return 'general';
   }
 
+  // ============================================================================
+  // ENTITY EXTRACTION DISPATCHER
+  // ============================================================================
+
   private extractEntities(
-    content: string,
+    lines: string[],
     documentType: ContentType,
-    filePath: string
+    filePath: string,
+    frontmatter: YAMLFrontmatter
   ): EntityBlock[] {
-    const lines = content.split('\n');
-    
     switch (documentType) {
       case 'adversary':
       case 'environment':
-        return this.extractStatBlocks(lines, documentType, filePath);
+        return this.extractStatBlocks(lines, documentType, filePath, frontmatter);
       case 'class':
-        return this.extractClassContent(lines, filePath);
+        return this.extractClassContent(lines, filePath, frontmatter);
       case 'domain_card':
-        return this.extractDomainCards(lines, filePath);
+        return this.extractDomainCards(lines, filePath, frontmatter);
       case 'equipment':
       case 'consumable':
-        return this.extractEquipmentSections(lines, filePath, documentType);
+        return this.extractEquipmentSections(lines, filePath, documentType, frontmatter);
       case 'ancestry':
-        return this.extractAncestries(lines, filePath);
+        return this.extractAncestries(lines, filePath, frontmatter);
       default:
-        return this.extractGenericSections(lines, filePath);
+        return this.extractGenericSections(lines, filePath, frontmatter);
     }
   }
 
@@ -170,7 +311,8 @@ export class SmartTTRPGParser implements DocumentParser {
   private extractStatBlocks(
     lines: string[],
     type: 'adversary' | 'environment',
-    filePath: string
+    filePath: string,
+    frontmatter: YAMLFrontmatter
   ): EntityBlock[] {
     const entities: EntityBlock[] = [];
     let currentBlock: string[] = [];
@@ -197,8 +339,13 @@ export class SmartTTRPGParser implements DocumentParser {
               content,
               metadata: {
                 documentType: type,
-                entityName: blockTitle,
-                tier,
+                entityName: frontmatter.name || blockTitle,
+                tier: tier || frontmatter.tier,
+                difficulty: frontmatter.difficulty,
+                category: frontmatter.category,
+                tags: frontmatter.tags,
+                related_adversaries: frontmatter.related_adversaries,
+                tactics: frontmatter.tactics,
                 sectionType: 'stat_block',
               },
               startLine: blockStart,
@@ -239,8 +386,13 @@ export class SmartTTRPGParser implements DocumentParser {
           content,
           metadata: {
             documentType: type,
-            entityName: blockTitle,
-            tier,
+            entityName: frontmatter.name || blockTitle,
+            tier: tier || frontmatter.tier,
+            difficulty: frontmatter.difficulty,
+            category: frontmatter.category,
+            tags: frontmatter.tags,
+            related_adversaries: frontmatter.related_adversaries,
+            tactics: frontmatter.tactics,
             sectionType: 'stat_block',
           },
           startLine: blockStart,
@@ -256,9 +408,15 @@ export class SmartTTRPGParser implements DocumentParser {
   // CLASS CONTENT
   // ============================================================================
 
-  private extractClassContent(lines: string[], filePath: string): EntityBlock[] {
+  private extractClassContent(
+    lines: string[], 
+    filePath: string,
+    frontmatter: YAMLFrontmatter
+  ): EntityBlock[] {
     const entities: EntityBlock[] = [];
-    const className = basename(filePath).replace('-class.md', '').toUpperCase();
+    const className = frontmatter.name || 
+                     frontmatter.title ||
+                     basename(filePath).replace('-class.md', '').toUpperCase();
     
     let currentSection: string[] = [];
     let sectionTitle = className;
@@ -281,6 +439,9 @@ export class SmartTTRPGParser implements DocumentParser {
             metadata: {
               documentType: 'class',
               entityName: className,
+              section: sectionTitle,
+              tags: frontmatter.tags,
+              related_topics: frontmatter.related_topics,
               sectionType: 'class_features',
             },
             startLine: sectionStart,
@@ -307,6 +468,9 @@ export class SmartTTRPGParser implements DocumentParser {
           metadata: {
             documentType: 'class',
             entityName: className,
+            section: sectionTitle,
+            tags: frontmatter.tags,
+            related_topics: frontmatter.related_topics,
             sectionType: 'class_features',
           },
           startLine: sectionStart,
@@ -322,9 +486,15 @@ export class SmartTTRPGParser implements DocumentParser {
   // DOMAIN CARDS
   // ============================================================================
 
-  private extractDomainCards(lines: string[], filePath: string): EntityBlock[] {
+  private extractDomainCards(
+    lines: string[], 
+    filePath: string,
+    frontmatter: YAMLFrontmatter
+  ): EntityBlock[] {
     const entities: EntityBlock[] = [];
-    const domainName = basename(filePath).replace('-domain-cards.md', '').toUpperCase();
+    const domainName = frontmatter.domain ||
+                      frontmatter.name ||
+                      basename(filePath).replace('-domain-cards.md', '').toUpperCase();
     
     let currentCard: string[] = [];
     let cardTitle = '';
@@ -351,7 +521,11 @@ export class SmartTTRPGParser implements DocumentParser {
                 documentType: 'domain_card',
                 entityName: cardTitle,
                 domain: domainName,
-                level,
+                level: level || frontmatter.level,
+                card_type: frontmatter.card_type,
+                recall_cost: frontmatter.recall_cost,
+                tags: frontmatter.tags,
+                related_domains: frontmatter.related_domains,
                 sectionType: 'domain_card',
               },
               startLine: cardStart,
@@ -393,7 +567,11 @@ export class SmartTTRPGParser implements DocumentParser {
             documentType: 'domain_card',
             entityName: cardTitle,
             domain: domainName,
-            level,
+            level: level || frontmatter.level,
+            card_type: frontmatter.card_type,
+            recall_cost: frontmatter.recall_cost,
+            tags: frontmatter.tags,
+            related_domains: frontmatter.related_domains,
             sectionType: 'domain_card',
           },
           startLine: cardStart,
@@ -412,7 +590,8 @@ export class SmartTTRPGParser implements DocumentParser {
   private extractEquipmentSections(
     lines: string[],
     filePath: string,
-    type: ContentType
+    type: ContentType,
+    frontmatter: YAMLFrontmatter
   ): EntityBlock[] {
     const entities: EntityBlock[] = [];
     let currentSection: string[] = [];
@@ -436,7 +615,10 @@ export class SmartTTRPGParser implements DocumentParser {
             content,
             metadata: {
               documentType: type,
-              tier,
+              tier: tier || frontmatter.tier,
+              equipment_type: frontmatter.equipment_type,
+              tags: frontmatter.tags,
+              category: frontmatter.category,
               sectionType: 'equipment_table',
             },
             startLine: sectionStart,
@@ -466,7 +648,10 @@ export class SmartTTRPGParser implements DocumentParser {
           content,
           metadata: {
             documentType: type,
-            tier,
+            tier: tier || frontmatter.tier,
+            equipment_type: frontmatter.equipment_type,
+            tags: frontmatter.tags,
+            category: frontmatter.category,
             sectionType: 'equipment_table',
           },
           startLine: sectionStart,
@@ -482,7 +667,11 @@ export class SmartTTRPGParser implements DocumentParser {
   // ANCESTRIES
   // ============================================================================
 
-  private extractAncestries(lines: string[], filePath: string): EntityBlock[] {
+  private extractAncestries(
+    lines: string[], 
+    filePath: string,
+    frontmatter: YAMLFrontmatter
+  ): EntityBlock[] {
     const entities: EntityBlock[] = [];
     let currentSection: string[] = [];
     let sectionTitle = '';
@@ -505,6 +694,8 @@ export class SmartTTRPGParser implements DocumentParser {
             metadata: {
               documentType: 'ancestry',
               entityName: sectionTitle,
+              tags: frontmatter.tags,
+              related_topics: frontmatter.related_topics,
               sectionType: 'ancestry',
             },
             startLine: sectionStart,
@@ -531,6 +722,8 @@ export class SmartTTRPGParser implements DocumentParser {
           metadata: {
             documentType: 'ancestry',
             entityName: sectionTitle,
+            tags: frontmatter.tags,
+            related_topics: frontmatter.related_topics,
             sectionType: 'ancestry',
           },
           startLine: sectionStart,
@@ -546,10 +739,15 @@ export class SmartTTRPGParser implements DocumentParser {
   // GENERIC SECTIONS (GM Guidance, etc.)
   // ============================================================================
 
-  private extractGenericSections(lines: string[], filePath: string): EntityBlock[] {
+  private extractGenericSections(
+    lines: string[], 
+    filePath: string,
+    frontmatter: YAMLFrontmatter
+  ): EntityBlock[] {
     const entities: EntityBlock[] = [];
     let currentSection: string[] = [];
-    let sectionTitle = basename(filePath).replace('.md', '');
+    let sectionTitle = frontmatter.title || 
+                      basename(filePath).replace('.md', '');
     let sectionStart = 0;
 
     for (let i = 0; i < lines.length; i++) {
@@ -569,6 +767,12 @@ export class SmartTTRPGParser implements DocumentParser {
             metadata: {
               documentType: 'general',
               section: sectionTitle,
+              tags: frontmatter.tags,
+              complexity: frontmatter.complexity,
+              prerequisites: frontmatter.prerequisites,
+              related_topics: frontmatter.related_topics,
+              player_facing: frontmatter.player_facing,
+              gm_facing: frontmatter.gm_facing,
               sectionType: 'general',
             },
             startLine: sectionStart,
@@ -595,6 +799,12 @@ export class SmartTTRPGParser implements DocumentParser {
           metadata: {
             documentType: 'general',
             section: sectionTitle,
+            tags: frontmatter.tags,
+            complexity: frontmatter.complexity,
+            prerequisites: frontmatter.prerequisites,
+            related_topics: frontmatter.related_topics,
+            player_facing: frontmatter.player_facing,
+            gm_facing: frontmatter.gm_facing,
             sectionType: 'general',
           },
           startLine: sectionStart,
@@ -610,13 +820,16 @@ export class SmartTTRPGParser implements DocumentParser {
   // SPLITTING LARGE ENTITIES
   // ============================================================================
 
-  private splitLargeEntity(entity: EntityBlock): Document[] {
+  private splitLargeEntity(
+    entity: EntityBlock,
+    frontmatter: YAMLFrontmatter
+  ): Document[] {
     const documents: Document[] = [];
     const lines = entity.content.split('\n');
     
     // Try to split by tables first
     if (entity.content.includes('|')) {
-      return this.splitByTable(entity);
+      return this.splitByTable(entity, frontmatter);
     }
     
     // Otherwise split by paragraphs
@@ -631,6 +844,7 @@ export class SmartTTRPGParser implements DocumentParser {
           new Document({
             pageContent: currentChunk.join('\n'),
             metadata: {
+              ...frontmatter,
               ...entity.metadata,
               section: entity.title,
               chunkIndex: documents.length,
@@ -654,6 +868,7 @@ export class SmartTTRPGParser implements DocumentParser {
         new Document({
           pageContent: currentChunk.join('\n'),
           metadata: {
+            ...frontmatter,
             ...entity.metadata,
             section: entity.title,
             chunkIndex: documents.length,
@@ -665,7 +880,10 @@ export class SmartTTRPGParser implements DocumentParser {
     return documents;
   }
 
-  private splitByTable(entity: EntityBlock): Document[] {
+  private splitByTable(
+    entity: EntityBlock,
+    frontmatter: YAMLFrontmatter
+  ): Document[] {
     const documents: Document[] = [];
     const lines = entity.content.split('\n');
     
@@ -700,6 +918,7 @@ export class SmartTTRPGParser implements DocumentParser {
             new Document({
               pageContent: [...header, ...currentChunk].join('\n'),
               metadata: {
+                ...frontmatter,
                 ...entity.metadata,
                 section: entity.title,
                 chunkIndex: documents.length,
@@ -727,6 +946,7 @@ export class SmartTTRPGParser implements DocumentParser {
         new Document({
           pageContent: [...header, ...currentChunk].join('\n'),
           metadata: {
+            ...frontmatter,
             ...entity.metadata,
             section: entity.title,
             chunkIndex: documents.length,
@@ -738,6 +958,33 @@ export class SmartTTRPGParser implements DocumentParser {
     return documents;
   }
 
+  // ============================================================================
+  // UTILITY METHODS
+  // ============================================================================
+
+  private getFilesFromDirectory(dirPath: string): string[] {
+    const files: string[] = [];
+    
+    try {
+      const items = readdirSync(dirPath);
+      
+      for (const item of items) {
+        const fullPath = join(dirPath, item);
+        const stat = statSync(fullPath);
+        
+        if (stat.isDirectory()) {
+          files.push(...this.getFilesFromDirectory(fullPath));
+        } else if (item.endsWith('.md')) {
+          files.push(fullPath);
+        }
+      }
+    } catch (error) {
+      console.error(`Error reading directory ${dirPath}:`, error);
+    }
+    
+    return files;
+  }
+
   getChunkStats(documents: Document[]): ChunkStats {
     const sizes = documents.map(doc => doc.pageContent.length);
     const withMetadata = documents.filter(doc => 
@@ -746,6 +993,7 @@ export class SmartTTRPGParser implements DocumentParser {
     
     const byType: Record<string, number> = {};
     const byTier: Record<string, number> = {};
+    const byTags: Record<string, number> = {};
     
     for (const doc of documents) {
       // Count by document type
@@ -756,6 +1004,13 @@ export class SmartTTRPGParser implements DocumentParser {
       if (doc.metadata.tier) {
         const tierKey = `Tier ${doc.metadata.tier}`;
         byTier[tierKey] = (byTier[tierKey] || 0) + 1;
+      }
+      
+      // Count by tags
+      if (doc.metadata.tags && Array.isArray(doc.metadata.tags)) {
+        for (const tag of doc.metadata.tags) {
+          byTags[tag] = (byTags[tag] || 0) + 1;
+        }
       }
     }
     
@@ -776,6 +1031,7 @@ export class SmartTTRPGParser implements DocumentParser {
       maxChunkSize: Math.max(...sizes),
       byType,
       byTier,
+      byTags,
       withMetadata,
       uniqueSections,
       uniqueSources,

@@ -1,3 +1,36 @@
+---
+type: general
+title: Introduction
+category: core-rules
+
+player_facing: true
+gm_facing: true
+tags:
+  - introduction
+  - getting-started
+  - basics
+  - what-is-daggerheart
+  - action-rolls
+  - duality-dice
+  - hope-and-fear
+  - golden-rule
+  - rulings-over-rules
+  - game-overview
+  - srd
+sections:
+  - What Is This
+  - The Basics
+  - What Is Daggerheart
+  - The Golden Rule
+  - Rulings Over Rules
+related_topics:
+  - Action Rolls
+  - Hope and Fear
+  - Duality Dice
+  - GM Guidance
+  - Game Philosophy
+prerequisites: []
+---
 # INTRODUCTION
 
 **Welcome to DAGGERHEART,** a collaborative fantasy tabletop roleplaying game of

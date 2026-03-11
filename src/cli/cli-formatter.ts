@@ -140,18 +140,18 @@ export class CLIFormatter {
       }
 
       // Features
-      if (trimmed.match(/^[•\-*]\s+/) || trimmed.match(/^_\*\*/)) {
+      if (trimmed.match(/^[-\-*]\s+/) || trimmed.match(/^_\*\*/)) {
         const [featurePart, ...descParts] = trimmed
-          .replace(/^[•\-*]\s+/, '')
+          .replace(/^[-\-*]\s+/, '')
           .replace(/^_\*\*/, '')
           .replace(/\*\*_?:/, ':')
           .split(':');
         
         if (descParts.length > 0) {
-          formatted += chalk.hex('#FFA500')(`• ${featurePart}:`) + 
+          formatted += chalk.hex('#FFA500')(`- ${featurePart}:`) + 
                       chalk.gray(descParts.join(':').trim()) + '\n';
         } else {
-          formatted += chalk.gray(`• ${featurePart}`) + '\n';
+          formatted += chalk.gray(`- ${featurePart}`) + '\n';
         }
         continue;
       }
@@ -283,9 +283,9 @@ export class CLIFormatter {
       }
 
       // Features (numbered or bulleted)
-      if ((trimmed.match(/^[•\-*\d]+[\.\)]\s+/) || trimmed.match(/^\d+\.\s+\*\*/)) && inFeatures) {
+      if ((trimmed.match(/^[-\-*\d]+[\.\)]\s+/) || trimmed.match(/^\d+\.\s+\*\*/)) && inFeatures) {
         const featureText = trimmed
-          .replace(/^[•\-*\d]+[\.\)]\s+/, '')
+          .replace(/^[-\-*\d]+[\.\)]\s+/, '')
           .replace(/^\d+\.\s+/, '');
         
         const [namePart, ...rest] = featureText.split(/[-–:]/);
@@ -294,17 +294,17 @@ export class CLIFormatter {
           const restText = rest.join(':').trim();
           const [typePart, ...descParts] = restText.split(':');
           
-          formatted += chalk.hex('#FFA500').bold(`• ${namePart?.trim()}`) +
+          formatted += chalk.hex('#FFA500').bold(`- ${namePart?.trim()}`) +
                       (typePart ? chalk.hex('#98FB98')(` - ${typePart.trim()}`) : '') +
                       (descParts.length > 0 ? chalk.gray(`: ${descParts.join(':').trim()}`) : '') + '\n';
         } else {
-          formatted += chalk.gray(`• ${featureText}`) + '\n';
+          formatted += chalk.gray(`- ${featureText}`) + '\n';
         }
         continue;
       }
 
       // Core stats
-      if (trimmed.match(/^[•\-*]\s+/) && !inFeatures) {
+      if (trimmed.match(/^[-\-*]\s+/) && !inFeatures) {
         formatted += chalk.hex('#87CEEB')(trimmed) + '\n';
         continue;
       }
@@ -334,7 +334,7 @@ export class CLIFormatter {
    */
   private formatDomainCards(text: string): string {
     // Try to extract cards from bullet point format
-    const cardPattern = /^[•\-*]\s+(.+?)\s*-\s*Level\s+(\d+)/gmi;
+    const cardPattern = /^[-\-*]\s+(.+?)\s*-\s*Level\s+(\d+)/gmi;
     const matches = [...text.matchAll(cardPattern)];
     
     if (matches.length === 0) {
@@ -355,7 +355,7 @@ export class CLIFormatter {
       
       // Extract cost, effect, range, duration
       const costMatch = cardText.match(/Cost:\s*(.+?)(?:\n|Effect:|Range:|Duration:|$)/i);
-      const effectMatch = cardText.match(/Effect:\s*(.+?)(?:\n\s*(?:Range:|Duration:|[•\-*])|\n\n|$)/is);
+      const effectMatch = cardText.match(/Effect:\s*(.+?)(?:\n\s*(?:Range:|Duration:|[-\-*])|\n\n|$)/is);
       const rangeMatch = cardText.match(/Range:\s*(.+?)(?:\n|Duration:|$)/i);
       const durationMatch = cardText.match(/Duration:\s*(.+?)(?:\n|$)/i);
       
@@ -465,9 +465,9 @@ export class CLIFormatter {
       }
 
       // Bullet points
-      if (trimmed.match(/^[•\-*]\s+/)) {
-        formatted += chalk.hex('#87CEEB')('• ') + 
-                    chalk.gray(trimmed.replace(/^[•\-*]\s+/, '')) + '\n';
+      if (trimmed.match(/^[-\-*]\s+/)) {
+        formatted += chalk.hex('#87CEEB')('- ') + 
+                    chalk.gray(trimmed.replace(/^[-\-*]\s+/, '')) + '\n';
       } else {
         formatted += chalk.gray(trimmed) + '\n';
       }
